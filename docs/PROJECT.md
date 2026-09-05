@@ -572,6 +572,25 @@ back and duplicates, and locals not named in `TSTART (...)` are not restored. Ca
 stdout to a global inside the frame, never to a device; latch `$TRESTART` and discard the
 case if it fired.
 
+**Every Runtime needs its own routine sandbox.** *Added 2026-09-05 from a reproduced
+defect.* Candidate source must go to a private directory per Runtime, not the container's
+shared `/home/vehu/r`, and the stdout capture file and trigger log must be keyed by `$J`.
+Sharing any of the three lets two verifiers working on the same routine *name* overwrite
+each other, and the symptom is not an error — it is a confident verdict computed against
+somebody else's candidate. Reproduced with four concurrent Runtimes: three of the four were
+told their candidate produced output that belonged to a different candidate. For a project
+whose product is "correctness is machine-checkable," this is the one defect class that
+invalidates everything downstream, so `tests/test_core.py` asserts the property directly.
+
+**Do not enable YottaDB auto-relink on the private object directory.** A trailing `*` in
+`$gtmroutines` (`objdir*(srcdir)`) turns on auto-relink, which fails with
+`%YDB-E-INVOBJFILE, ... due to unexpected format` on roughly the fourth relink of a
+*changing* source for one routine name. That is exactly the access pattern of verifying a
+stream of mutants. Small routines survive many more links than large ones, so it presents
+as intermittent and environmental when it is neither — it cost 561 spurious rejections out
+of 565 in a real build, and reading it as container contention sent the investigation the
+wrong way for hours. Drop the `*`; ORCRC went from 280+ load failures to zero.
+
 **One long-lived worker, not one process per case.** `docker exec` plus `mumps -run` costs
 448ms per invocation, which dominates every realistic cycle. Drive a single supervised M
 worker over a pipe and respawn it on death.
