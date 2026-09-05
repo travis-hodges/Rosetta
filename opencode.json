@@ -1,21 +1,53 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "rosetta-mock": {
+    "rosetta": {
       "type": "local",
       "command": [
         "python3",
         "-m",
-        "rosetta.demo.mock_mcp_server"
+        "rosetta.tools"
       ],
-      "cwd": "/Users/travishodges/Repos/Rosetta",
+      "enabled": true,
       "environment": {
         "PYTHONPATH": "/Users/travishodges/Repos/Rosetta",
         "PYTHONUNBUFFERED": "1",
-        "ROSETTA_MOCK_MCP_TRANSCRIPT": "/tmp/oc-mcp-transcript.jsonl"
-      },
-      "enabled": true,
-      "timeout": 30000
+        "ROSETTA_TOOLS_BACKEND": "auto",
+        "ROSETTA_TOOLS_CONTAINER": "vehu"
+      }
+    }
+  },
+  "default_agent": "rosetta",
+  "instructions": [
+    "AGENTS.md",
+    "docs/PROJECT.md"
+  ],
+  "username": "rosetta",
+  "permission": {
+    "bash": {
+      "git push*": "deny",
+      "git commit*": "deny",
+      "gh pr *": "deny",
+      "docker rm*": "deny",
+      "docker stop*": "deny",
+      "*": "allow"
+    }
+  },
+  "agent": {
+    "rosetta": {
+      "color": "#ff8053"
+    },
+    "divergence": {
+      "color": "#c4deaa"
+    },
+    "explain": {
+      "color": "#a1a49a"
+    },
+    "build": {
+      "color": "#a1a49a"
+    },
+    "plan": {
+      "color": "#f4f1e9"
     }
   }
 }
