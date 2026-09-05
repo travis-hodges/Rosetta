@@ -113,7 +113,14 @@ class Runtime:
     """Owns the worker, the loaded routines and the capture plan."""
 
     def __init__(self, config: CoreConfig | None = None) -> None:
-        self.config = config or DEFAULT_CONFIG
+        # A fresh session per Runtime, derived from DEFAULT_CONFIG so any
+        # customisation of it is preserved. Sharing the module singleton meant
+        # every Runtime shared one private directory, which put concurrent
+        # verifiers back on the same candidate source -- and a verifier that
+        # reads somebody else's candidate returns a confident wrong verdict.
+        self.config = config or replace(
+            DEFAULT_CONFIG, session=f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        )
         self.worker = MWorker(self.config)
         self._loaded: dict[str, LoadedRoutine] = {}
         self._installed_trigger_roots: tuple[str, ...] = ()
@@ -268,11 +275,18 @@ class Runtime:
             raise ValueError(f"implausible routine name: {name!r}")
         reject_if_unsafe(name, source)
 
+        # The private sandbox is created when the worker starts, and
+        # load_routine is reachable before the first execute().
+        self.worker.ensure_started()
+
         facts = parse(name, source)
         with tempfile.TemporaryDirectory() as tmp:
             local = Path(tmp) / f"{name}.m"
             local.write_text(source, encoding="utf-8")
-            self._copy_in(local, f"{self.config.routine_dir}/{name}.m")
+            # Private, not {routine_dir}: a shared source directory means two
+            # verifiers working on the same routine name overwrite each other,
+            # which yields a confident verdict for somebody else's candidate.
+            self._copy_in(local, f"{self.config.private_src}/{name}.m")
 
         resp = self.worker.send(Request().add("CMD", "LINK").add("ROUTINE", name))
         if not resp.ok:

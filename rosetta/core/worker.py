@@ -94,16 +94,20 @@ class MWorker:
         self._check_container()
         if not M_WORKER_SOURCE.is_file():
             raise WorkerError(f"missing M worker source at {M_WORKER_SOURCE}")
-        dest = f"{cfg.routine_dir}/ROSWRK.m"
+        # Everything lands in THIS runtime's private sandbox. Writing the
+        # worker into the container's shared routine directory raced other
+        # verifiers: deleting a shared ROSWRK.o while another process ZLINKed
+        # it produced %YDB-E-INVOBJFILE.
+        _run(self._docker("exec", "-u", cfg.instance, cfg.container,
+                          "mkdir", "-p", cfg.scratch_dir, cfg.snapshot_dir,
+                          cfg.private_src, cfg.private_obj))
+        dest = f"{cfg.private_src}/ROSWRK.m"
         _run(self._docker("cp", str(M_WORKER_SOURCE), f"{cfg.container}:{dest}"))
         _run(self._docker("exec", "-u", "root", cfg.container,
-                          "chown", f"{cfg.instance}:{cfg.instance}", dest))
-        _run(self._docker("exec", "-u", cfg.instance, cfg.container,
-                          "mkdir", "-p", cfg.scratch_dir, cfg.snapshot_dir))
-        # Force a recompile so a stale object never shadows an edited worker.
-        _run(self._docker("exec", "-u", "root", cfg.container, "bash", "-c",
-                          f"rm -f {cfg.routine_dir}/*/ROSWRK.o {cfg.routine_dir}/ROSWRK.o"),
-             check=False)
+                          "chown", "-R", f"{cfg.instance}:{cfg.instance}", cfg.private_dir))
+        # Private object dir, so a recompile cannot shadow or be shadowed.
+        _run(self._docker("exec", "-u", cfg.instance, cfg.container, "bash", "-c",
+                          f"rm -f {cfg.private_obj}/ROSWRK.o"), check=False)
 
     def _spawn(self) -> None:
         cfg = self.config
@@ -111,6 +115,11 @@ class MWorker:
             "exec", "-i", "-u", cfg.instance, cfg.container,
             "bash", "-c",
             f"source {cfg.env_file} && cd {cfg.scratch_dir} && "
+            # Prepend this runtime's private (object, source) pair so ZLINK
+            # compiles into a directory nothing else writes. The shared dirs
+            # stay on the path, read-only, so real VistA routines still resolve.
+            f'export gtmroutines="{cfg.private_obj}*({cfg.private_src}) $gtmroutines" && '
+            f'export ROSWRKOBJD="{cfg.private_obj}" && '
             f"exec $gtm_dist/mumps -run MAIN^ROSWRK",
         )
         log.debug("spawning worker: %s", " ".join(cmd))

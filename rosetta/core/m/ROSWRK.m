@@ -19,11 +19,15 @@ ROSWRK ;Rosetta;Long-lived verification worker
  ;
  ;----------------------------------------------------------------- main loop
 MAIN ; mumps -run MAIN^ROSWRK
- N ROSLVL,ROSQ,ROSST,ROSREQ,ROSRES,ROSTMPD,ROSCAPF
+ N ROSLVL,ROSQ,ROSST,ROSREQ,ROSRES,ROSTMPD,ROSCAPF,ROSOBJD
  S U="^"
  U $P:(NOWRAP:WIDTH=1048576)
  S ROSTMPD="/home/vehu/tmp/rosetta"
- S ROSCAPF=ROSTMPD_"/capture.txt"
+ S ROSOBJD=$ZTRNLNM("ROSWRKOBJD")
+ ; Per-process capture file. A plain OS file gets no TP isolation, so a
+ ; shared path let concurrent verifiers read each other's stdout and
+ ; return a confident verdict for somebody else's candidate.
+ S ROSCAPF=ROSTMPD_"/capture."_$J_".txt"
  S ROSLVL=$ZLEVEL,ROSQ=0,ROSST=""
  W "ROSETTA-WORKER",$C(9),"1",!
 MLOOP ; one request/response round trip
@@ -120,6 +124,12 @@ LINK ; recompile and link one routine from source
  I R="" D RESP("STATUS","ERR"),RESP("ERROR","LINK: no ROUTINE") Q
  S LVL=$ZLEVEL
  S $ZTRAP="S ROSST=$ZSTATUS ZGOTO "_LVL_":LINKERR^ROSWRK"
+ ; Drop any existing object first. A stale or partially written .o makes the
+ ; NEXT ZLINK of this routine fail with INVOBJFILE ("unexpected format") even
+ ; when the source is byte-identical to one that just linked cleanly, which
+ ; rejected 561 of 565 candidates in a real benchmark build. Compiling from
+ ; source every time costs milliseconds and removes the whole failure class.
+ D DROPOBJ(R)
  ZLINK R_".m"
  ; ZLINK prints compiler diagnostics to stderr but does NOT raise a trappable
  ; error, so $ZTRAP never fires on a syntax error. $ZCSTATUS is 1 after a clean
@@ -128,6 +138,15 @@ LINK ; recompile and link one routine from source
  I $ZCSTATUS'=1 D RESP("STATUS","ERR"),RESP("ERROR","compile failed: "_$ZMESSAGE($ZCSTATUS)),RESP("ZSTATUS",$ZCSTATUS) Q
  D RESP("STATUS","OK")
  Q
+DROPOBJ(R) ; delete this routine's object file from our private object dir
+ N D,F,E
+ S D=$G(ROSOBJD) Q:D=""
+ S F=D_"/"_R_".o"
+ S E=$ZTRAP,$ZTRAP="S $EC="""" Q"   ; a missing object is the normal case
+ O F:(NEWVERSION:EXCEPTION="S $EC="""" Q") C F:DELETE
+ S $ZTRAP=E
+ Q
+ ;
 LINKERR D RESP("STATUS","ERR"),RESP("ERROR",$$MERR($G(ROSST))),RESP("ZSTATUS",$G(ROSST))
  Q
  ;
@@ -140,7 +159,7 @@ KILLG ; KILL global roots outside any transaction
  ;
 RESET ; return the process to a known state
  I $TLEVEL>0 TROLLBACK
- K ^ROSLOG,^ROSTMP
+ K ^ROSLOG($J),^ROSTMP($J)
  D RESP("STATUS","OK"),RESP("TLEVEL",$TLEVEL)
  Q
  ;
@@ -186,14 +205,14 @@ TRIG ; install or clear $ZTRIGGER capture triggers
  ;
 TS ; SET trigger body. Read $REFERENCE FIRST: our own log write clobbers it.
  N ROSR S ROSR=$REFERENCE
- N ROSN S ROSN=$I(^ROSLOG)
- S ^ROSLOG(ROSN)="S"_$C(9)_ROSR_$C(9)_$G(@ROSR)
+ N ROSN S ROSN=$I(^ROSLOG($J))
+ S ^ROSLOG($J,ROSN)="S"_$C(9)_ROSR_$C(9)_$G(@ROSR)
  Q
  ;
 TK ; KILL/ZKILL trigger body
  N ROSR S ROSR=$REFERENCE
- N ROSN S ROSN=$I(^ROSLOG)
- S ^ROSLOG(ROSN)="K"_$C(9)_ROSR_$C(9)_""
+ N ROSN S ROSN=$I(^ROSLOG($J))
+ S ^ROSLOG($J,ROSN)="K"_$C(9)_ROSR_$C(9)_""
  Q
  ;
  ;----------------------------------------------------------------- execution
@@ -237,7 +256,7 @@ EXEC ; run one ExecSpec inside a TP frame
  ; "*" restores the whole local symbol table on a restart. Anything not named
  ; is NOT restored, and a silent restart would otherwise leave stale capture.
  TSTART *:SERIAL
- K ^ROSLOG
+ K ^ROSLOG($J)
  F I=1:1:NSEED S @ROSSEED(I)=ROSSEED(I,"v")
  S LVL=$ZLEVEL
  S $ZTRAP="S ROSERR=$ZSTATUS ZGOTO "_LVL_":BODYERR^ROSWRK"
@@ -296,10 +315,10 @@ MKCMD(ROU,ENTRY,ISX,NARG) ; build the XECUTE string; args ride in ROSA(), never
 HARVEST ; collect globals_out while still inside the frame
  N I,R,C,K
  ; tier 2 -- trigger log (exact, any depth, survives unbounded write sets)
- S C="" F  S C=$O(^ROSLOG(C)) Q:C=""  D
- . S R=$P(^ROSLOG(C),$C(9),2)
- . I $P(^ROSLOG(C),$C(9),1)="K" S ROSGV(R)=$C(1)_"KILLED" Q
- . S ROSGV(R)=$P(^ROSLOG(C),$C(9),3,999999)
+ S C="" F  S C=$O(^ROSLOG($J,C)) Q:C=""  D
+ . S R=$P(^ROSLOG($J,C),$C(9),2)
+ . I $P(^ROSLOG($J,C),$C(9),1)="K" S ROSGV(R)=$C(1)_"KILLED" Q
+ . S ROSGV(R)=$P(^ROSLOG($J,C),$C(9),3,999999)
  ; tier 1 -- scoped $QUERY walk of statically-named roots
  S I="" F  S I=$O(ROSWROOT(I)) Q:I=""  D
  . S R=ROSWROOT(I) Q:R=""
