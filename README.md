@@ -45,6 +45,37 @@ See [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) for how to run it.
 
 ---
 
+---
+
+## What works today
+
+Verified on this machine against a live WorldVistA container. Commands are runnable.
+
+| | Status |
+|---|---|
+| **The verifier** | `python3 -m rosetta.core.selftest` — passes in ~2.5s |
+| **MCP tool server** | 8 tools over stdio; `opencode mcp list` reports `rosetta connected` |
+| **The side-by-side** | `python3 -m rosetta.demo` — runs offline, no container, no network |
+| **Mutation generator** | 8 operators; 0.00% defect rate measured against the real YottaDB compiler |
+| **Split lock** | Written and frozen: 350 train / 150 eval, partitioned by duplicate cluster |
+| **Comprehension labels** | 1,493 pairs from the train split, plus the RFT grader |
+| **Benchmark results** | **None published.** No full run has happened yet. |
+
+The load-bearing demonstration is in the selftest: a `CMP_FLIP` injected into a real VistA
+routine is caught by diffing global state, and the report names the exact node that moved —
+`^PXRMINDX(9000010.71,"IP","10D","Z00.00",777,3250101,4242)`. That is the whole thesis in
+one line of output.
+
+`python3 -m rosetta.demo` shows the money moment on `^DPT(DFN,.21)`, the next-of-kin node of
+the PATIENT file. 765 patients have that node; 69 have it present with the name piece blank.
+A plausible-looking refactor returns an empty string for every one of those where the
+original returned `"Not Entered"` — fluently explained, entirely wrong, and caught
+mechanically.
+
+**No benchmark number is published, and the site shows a pending state rather than a
+placeholder.** Every figure it can display is read from `results/summary.json`, which is
+written only by a real run.
+
 ## Working in this repository
 
 Agents and contributors read [`AGENTS.md`](AGENTS.md) first, then
@@ -77,6 +108,10 @@ The installation is intentionally temporary. A one-shot LaunchAgent permanently 
 background service and all of its runtime state three days after installation; it does not
 delete this repository.
 
+The polling service is currently **disabled** (`launchctl disable`). It had been running from
+a second, stale checkout and opening pull requests from an eleven-commit-old base. Re-enable
+with `launchctl enable` only after confirming which checkout its plist points at.
+
 ## Website
 
 The product website lives in [`web/index.html`](web/index.html): one self-contained,
@@ -91,7 +126,7 @@ npm run preview
 ```
 
 No package installation is needed. The optional build copies the site to `dist/` for
-Vercel. Home, downloads, and account views use hash routes so they also work offline.
+Vercel. Views use hash routes so they work offline.
 
 See [`web/README.md`](web/README.md) for release links, account integration, the benchmark
 report contract, and verification limits. Login and installers stay explicitly unavailable
