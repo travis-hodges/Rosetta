@@ -497,6 +497,45 @@ class TestLiveRuntime(unittest.TestCase):
         self.assertEqual(report.n_diverged, 0)
         self.assertEqual(report.divergences, [])
 
+    # -- cross-process isolation ---------------------------------------------
+
+    def test_concurrent_runtimes_do_not_read_each_others_candidates(self) -> None:
+        """The worst bug this verifier can have: a confident WRONG verdict.
+
+        Every Runtime used to share one private directory, one stdout capture
+        file and one ^ROSLOG. Four runtimes verifying different candidates of
+        the same routine NAME concurrently would each report whichever
+        candidate happened to land last -- not an error, a wrong answer. Under
+        any parallel benchmark run that silently corrupts every number.
+        """
+        import concurrent.futures as cf
+
+        from rosetta.core.runtime import Runtime
+
+        baseline = 'ROSISO ;\nGO ;\n W "base",!\n Q\n'
+
+        def verify(tag: str) -> tuple[str, list[str]]:
+            rt = Runtime()
+            candidate = f'ROSISO ;\nGO ;\n W "{tag}",!\n Q\n'
+            report = rt.verify_equivalence(
+                "ROSISO", baseline, candidate,
+                [ExecSpec(routine="ROSISO", entry="GO")],
+            )
+            return tag, [d.actual for d in report.divergences]
+
+        tags = ["AAA", "BBB", "CCC", "DDD"]
+        with cf.ThreadPoolExecutor(max_workers=len(tags)) as pool:
+            for tag, actuals in pool.map(verify, tags):
+                self.assertTrue(
+                    any(tag in a for a in actuals),
+                    f"runtime for {tag} saw {actuals} -- another runtime's candidate",
+                )
+
+    def test_each_runtime_gets_its_own_session(self) -> None:
+        from rosetta.core.runtime import Runtime
+
+        self.assertNotEqual(Runtime().config.session, Runtime().config.session)
+
     # -- isolation quality ---------------------------------------------------
 
     def test_no_restarts_in_the_quiesced_container(self) -> None:

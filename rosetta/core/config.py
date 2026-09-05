@@ -8,6 +8,9 @@ container or instance name does not require a code change. Defaults match what
 from __future__ import annotations
 
 import os
+import os
+import uuid
+
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +34,14 @@ class CoreConfig:
     #: Seconds to wait for the worker to print its banner after spawn.
     startup_timeout_s: float = 60.0
 
+    #: Unique per-Runtime token. Isolates this runtime's compiled objects and
+    #: candidate source from every other process in the container -- concurrent
+    #: ZLINK into a shared object directory yields INVOBJFILE, and a shared
+    #: source directory is a correctness hazard, not just a crash.
+    session: str = field(
+        default_factory=lambda: f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    )
+
     #: Cap on nodes collected per watched global root in one $QUERY walk.
     max_nodes_per_root: int = 20_000
 
@@ -47,7 +58,27 @@ class CoreConfig:
 
     @property
     def routine_dir(self) -> str:
+        """The container's SHARED routine directory. Read-only for us.
+
+        Never write a candidate here: every runtime in the container resolves
+        routines through it, so two verifiers working on the same routine name
+        would clobber each other's source and could report a verdict for
+        somebody else's candidate.
+        """
         return f"{self.basedir}/r"
+
+    @property
+    def private_dir(self) -> str:
+        """This runtime's own routine sandbox, isolated from every other."""
+        return f"{self.scratch_dir}/rt/{self.session}"
+
+    @property
+    def private_src(self) -> str:
+        return f"{self.private_dir}/src"
+
+    @property
+    def private_obj(self) -> str:
+        return f"{self.private_dir}/obj"
 
     @property
     def scratch_dir(self) -> str:
