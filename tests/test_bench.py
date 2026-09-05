@@ -7,8 +7,6 @@ is ever written by a test, and no fixture number is ever published.
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import tempfile
 import unittest
 from dataclasses import dataclass, field
@@ -598,38 +596,6 @@ class TestReport(unittest.TestCase):
         self.assertIn("pass@1", text)
         self.assertIn("per operator", text)
         self.assertIn("CMP_FLIP", text)
-
-
-class TestAgainstTheRealWebsiteValidator(unittest.TestCase):
-    """Run our output through ``validateReport`` extracted from web/index.html."""
-
-    def test_summary_passes_the_shipped_validator(self) -> None:
-        node = shutil.which("node")
-        if node is None:
-            self.skipTest("node not available")
-        records, task_set = _traces_and_task_set()
-        report = R.build_report(records, task_set=task_set)
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "summary.json"
-            path.write_text(json.dumps(report.summary))
-            script = f"""
-              import {{ readFile }} from 'node:fs/promises';
-              import {{ runInNewContext }} from 'node:vm';
-              const html = await readFile({json.dumps(str(REPO_ROOT / 'web' / 'index.html'))}, 'utf8');
-              const src = html.match(/<script id="rosetta-core">([\\s\\S]*?)<\\/script>/)[1];
-              const api = runInNewContext(src + '\\nRosettaUI', {{URL}});
-              const doc = JSON.parse(await readFile({json.dumps(str(path))}, 'utf8'));
-              const parsed = api.validateReport(doc);
-              if (parsed.conditions.length < 2) throw new Error('conditions lost');
-              console.log('OK ' + parsed.task_count + ' ' + parsed.split_hash.slice(0,12));
-            """
-            mjs = Path(tmp) / "check.mjs"
-            mjs.write_text(script)
-            proc = subprocess.run(
-                [node, str(mjs)], capture_output=True, text=True, timeout=60
-            )
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("OK", proc.stdout)
 
 
 if __name__ == "__main__":

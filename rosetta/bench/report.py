@@ -3,10 +3,9 @@
 Two artifacts, one source of truth:
 
 ``results/summary.json``
-    Exactly the schema the site's ``validateReport`` accepts (``web/index.html``,
-    mirrored in :func:`validate_summary` and guarded by ``tests/web.test.mjs``).
-    Nothing else goes in it -- the site refuses an invalid report and shows a
-    pending state, and every extra field is a chance to break that contract.
+    The published benchmark contract, defined here and enforced by
+    :func:`validate_summary`. Nothing else goes in it -- every extra field is a
+    chance to break that contract for whatever consumes the report next.
 
 ``results/report.json`` + a text table
     The richer view section 9 asks for: per-operator breakdown, repair
@@ -87,10 +86,10 @@ class ReportRefused(RuntimeError):
 
 
 def validate_summary(doc: Mapping[str, Any]) -> dict[str, Any]:
-    """Python mirror of the site's ``validateReport``. Raises on anything it rejects.
+    """The published contract for ``summary.json``. Raises on anything it rejects.
 
-    Kept deliberately literal against ``web/index.html`` so a drift in either
-    direction is a test failure rather than a pending state at hour 35.
+    Deliberately literal: a producer that drifts from this is a test failure
+    rather than a malformed report discovered by whoever reads it.
     """
     if doc.get("schema_version") != SUMMARY_SCHEMA_VERSION:
         raise ReportRefused("Expected a schema_version 1 benchmark report.")

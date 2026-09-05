@@ -1111,13 +1111,14 @@ Zero dependencies means zero chance it breaks at hour 35. Reads `results/summary
 Build from hour 0 in parallel. It has no dependencies and it's the artifact that survives
 the weekend.
 
-> **Current state:** satisfied. `web/index.html` is a self-contained file with inline CSS
-> and JS covering all eight sections above. It opens offline with no build step; a
-> dependency-free Node script copies it to `dist/` for Vercel. The benchmark panel is
-> populated only from `results/summary.json` and shows an explicit pending state otherwise
-> — never sample figures. An account/login portal was proposed and **removed**: Rosetta
-> holds no customer credentials or code, and a sign-in surface contradicts the air-gapped
-> pitch. `tests/web.test.mjs` guards that the route stays gone.
+> **Current state:** satisfied. The landing page is `index.html` plus `src/styles.css` and
+> `src/main.js` — static files with original canvas artwork, no bundler, no package
+> installation. A dependency-free Node script copies them to `dist/` for Vercel. The page
+> states that published benchmark results are pending rather than showing sample figures;
+> the contract those results must satisfy lives in `rosetta/bench/report.py`. An
+> account/login portal was proposed and **removed**: Rosetta holds no customer credentials
+> or code, and a sign-in surface contradicts the air-gapped pitch. `tests/web.test.mjs`
+> guards the page's structure, its local assets, and that no percentage is hand-authored.
 
 ---
 
