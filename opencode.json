@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "rosetta-mock": {
+      "type": "local",
+      "command": [
+        "python3",
+        "-m",
+        "rosetta.demo.mock_mcp_server"
+      ],
+      "cwd": "/Users/travishodges/Repos/Rosetta",
+      "environment": {
+        "PYTHONPATH": "/Users/travishodges/Repos/Rosetta",
+        "PYTHONUNBUFFERED": "1",
+        "ROSETTA_MOCK_MCP_TRANSCRIPT": "/tmp/oc-mcp-transcript.jsonl"
+      },
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
