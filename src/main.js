@@ -78,7 +78,7 @@ const glyphRain = document.querySelector('#glyph-rain');
 if (glyphRain) { const chars = ['░','▒','▓','0','1','/','\\','→','←','+','▌','▐']; glyphRain.textContent = Array.from({ length: 2200 }, (_, index) => index % 84 === 0 ? '\n' : chars[Math.floor(Math.random() * chars.length)]).join(' '); }
 
 const eventCopy = document.querySelector('#event-copy'); const statusCopy = document.querySelector('.status-copy');
-const events = [['worktree.create → ready', '"CLAIMED"'], ['agent.delegate → builder', '"RUNNING"'], ['tests.verify → 11 passed', '"VERIFIED"'], ['pull-request.open → #108', '"COMPLETE"']]; let eventIndex = 0;
+const events = [['snapshot.baseline → ready', '"CAPTURED"'], ['runtime.execute → reference', '"RUNNING"'], ['globals.diff → divergence', '"FOUND"'], ['state.restore → clean', '"VERIFIED"']]; let eventIndex = 0;
 if (!reducedMotion) setInterval(() => { eventIndex = (eventIndex + 1) % events.length; if (eventCopy) eventCopy.textContent = events[eventIndex][0]; if (statusCopy) statusCopy.textContent = events[eventIndex][1]; }, 1900);
 
 const proofSection = document.querySelector('.workflow-section'); const proofLeft = document.querySelector('.proof-left'); const proofRight = document.querySelector('.proof-right');
