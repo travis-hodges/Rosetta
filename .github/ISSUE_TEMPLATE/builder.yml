@@ -1,0 +1,40 @@
+name: Builder agent task
+description: Assign an implementation task to a local Codex agent.
+title: "[Build] "
+labels:
+  - "agent:ready"
+  - "agent:builder"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submitting this issue queues it for the private, owner-authorized local Codex runner.
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: State the concrete outcome the agent must deliver.
+      placeholder: Implement...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable conditions that define completion.
+      placeholder: |
+        - [ ] Behavior...
+        - [ ] Tests...
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and evidence
+      description: Include relevant paths, failures, links, or prior decisions.
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Note compatibility, security, copy, or scope limits.
+

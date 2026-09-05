@@ -1,0 +1,34 @@
+name: Review agent task
+description: Assign an independent code, security, or quality review to a local Codex agent.
+title: "[Review] "
+labels:
+  - "agent:ready"
+  - "agent:reviewer"
+body:
+  - type: dropdown
+    id: review_type
+    attributes:
+      label: Review type
+      options:
+        - Correctness and regressions
+        - Security
+        - Test quality
+        - Maintainability
+        - Full review
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Identify the branch, pull request, commit, or files to review.
+    validations:
+      required: true
+  - type: textarea
+    id: standard
+    attributes:
+      label: Acceptance standard
+      description: Describe the expected evidence and severity threshold.
+    validations:
+      required: true
+
