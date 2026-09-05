@@ -118,7 +118,10 @@ class MWorker:
             # Prepend this runtime's private (object, source) pair so ZLINK
             # compiles into a directory nothing else writes. The shared dirs
             # stay on the path, read-only, so real VistA routines still resolve.
-            f'export gtmroutines="{cfg.private_obj}*({cfg.private_src}) $gtmroutines" && '
+            # NO trailing '*': that enables YottaDB auto-relink, which dies with
+            # INVOBJFILE on the 4th relink of a CHANGING source for one routine
+            # name -- exactly what verifying a stream of mutants does.
+            f'export gtmroutines="{cfg.private_obj}({cfg.private_src}) $gtmroutines" && '
             f'export ROSWRKOBJD="{cfg.private_obj}" && '
             f"exec $gtm_dist/mumps -run MAIN^ROSWRK",
         )

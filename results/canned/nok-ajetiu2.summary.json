@@ -1,0 +1,176 @@
+{
+  "run_id": "nok-ajetiu2-scripted-de30117c",
+  "task_id": "nok-ajetiu2",
+  "routine": "AJETIU2",
+  "title": "Guard the next-of-kin lookup in NOK^AJETIU2",
+  "request": "NOK^AJETIU2 reads the next-of-kin node ^DPT(DFN,.21) and returns the next-of-kin name. Make the missing-record path explicit: when there is no next-of-kin record for the patient, the routine should say so rather than falling through. Do not change any other behaviour.",
+  "stakes": "^DPT(DFN,.21) is the next-of-kin node of the PATIENT file. In this database 765 patients have that node and 69 of them have it present with the name piece blank -- a next-of-kin record with an address and no name. For every one of those 69 the rewrite returns an empty string where the routine used to return 'Not Entered'.",
+  "backend": "scripted",
+  "model": null,
+  "trace": "/Users/travishodges/Repos/Rosetta/results/nok-ajetiu2-scripted-de30117c.jsonl",
+  "conditions": {
+    "tools_off": {
+      "condition": "tools_off",
+      "agent": "scripted",
+      "backend": "scripted",
+      "attempts": [
+        {
+          "attempt": 1,
+          "explanation": "NA is fetched with $G, so it is safe, but NOK is derived from it before the emptiness test. Testing NA directly is the clearer expression of 'there is no next-of-kin record', and it also protects the test from an undefined NA if the $G is ever removed. Behaviour is unchanged: when there is no record, NA is empty, so NOK is empty too.",
+          "diff": "--- AJETIU2 (baseline)\n+++ AJETIU2 (candidate)\n@@ -10,3 +10,3 @@\n  N LINE,N,V,CC,NR,P,MRK S LINE=1,NA=$G(^DPT(DFN,.21)),NOK=$P(NA,U)\n- S MRK=0 I NOK=\"\" S NOK=\"Not Entered\",MRK=1\n+ S MRK=0 I $G(NA)=\"\" S NOK=\"Not Entered\",MRK=1\n  S N(1)=$P(NA,U,3),N(2)=$P(NA,U,4),N(3)=$P(NA,U,5),N(\"CIT\")=$P(NA,U,6)\n",
+          "candidate_sha1": "afd1351051947671357dbcffab25baf70ab404f6",
+          "final": true
+        }
+      ],
+      "n_attempts": 1,
+      "tool_calls": 0,
+      "agent_claimed_success": true,
+      "verified_equivalent": false,
+      "false_confidence": true,
+      "verdict": {
+        "task_id": "nok-ajetiu2",
+        "routine": "AJETIU2",
+        "equivalent": false,
+        "n_cases": 4,
+        "n_diverged": 3,
+        "n_void": 0,
+        "duration_ms": 2858,
+        "source": "live",
+        "headline": "NOT EQUIVALENT \u2014 AJETIU2 candidate diverged on 3 of 4 case(s).",
+        "cases": [
+          {
+            "label": "DFN 3",
+            "why": "next-of-kin record present, name filled in -- the ordinary path",
+            "equivalent": true,
+            "n_void": 0,
+            "duration_ms": 734,
+            "divergences": []
+          },
+          {
+            "label": "DFN 4",
+            "why": "^DPT(4,.21) exists but every piece is empty -- no next-of-kin name",
+            "equivalent": false,
+            "n_void": 0,
+            "duration_ms": 699,
+            "divergences": [
+              {
+                "kind": "output",
+                "ref": "stdout",
+                "expected": "Not Entered",
+                "actual": "",
+                "case_index": 0
+              }
+            ]
+          },
+          {
+            "label": "DFN 86",
+            "why": "^DPT(86,.21) is a short node, name piece blank",
+            "equivalent": false,
+            "n_void": 0,
+            "duration_ms": 717,
+            "divergences": [
+              {
+                "kind": "output",
+                "ref": "stdout",
+                "expected": "Not Entered",
+                "actual": "",
+                "case_index": 0
+              }
+            ]
+          },
+          {
+            "label": "DFN 88",
+            "why": "^DPT(88,.21) present, name piece blank",
+            "equivalent": false,
+            "n_void": 0,
+            "duration_ms": 707,
+            "divergences": [
+              {
+                "kind": "output",
+                "ref": "stdout",
+                "expected": "Not Entered",
+                "actual": "",
+                "case_index": 0
+              }
+            ]
+          }
+        ]
+      },
+      "error": null,
+      "duration_ms": 0
+    },
+    "tools_on": {
+      "condition": "tools_on",
+      "agent": "scripted",
+      "backend": "scripted",
+      "attempts": [
+        {
+          "attempt": 1,
+          "explanation": "NA is fetched with $G, so it is safe, but NOK is derived from it before the emptiness test. Testing NA directly is the clearer expression of 'there is no next-of-kin record', and it also protects the test from an undefined NA if the $G is ever removed. Behaviour is unchanged: when there is no record, NA is empty, so NOK is empty too.",
+          "diff": "--- AJETIU2 (baseline)\n+++ AJETIU2 (candidate)\n@@ -10,3 +10,3 @@\n  N LINE,N,V,CC,NR,P,MRK S LINE=1,NA=$G(^DPT(DFN,.21)),NOK=$P(NA,U)\n- S MRK=0 I NOK=\"\" S NOK=\"Not Entered\",MRK=1\n+ S MRK=0 I $G(NA)=\"\" S NOK=\"Not Entered\",MRK=1\n  S N(1)=$P(NA,U,3),N(2)=$P(NA,U,4),N(3)=$P(NA,U,5),N(\"CIT\")=$P(NA,U,6)\n",
+          "candidate_sha1": "afd1351051947671357dbcffab25baf70ab404f6",
+          "final": false
+        },
+        {
+          "attempt": 2,
+          "explanation": "The condition has to stay on the *name piece*, not on the whole node. Spelling it $P($G(NA),U) makes the missing-record path explicit without moving the test to a different value.",
+          "diff": "--- AJETIU2 (baseline)\n+++ AJETIU2 (candidate)\n@@ -10,3 +10,3 @@\n  N LINE,N,V,CC,NR,P,MRK S LINE=1,NA=$G(^DPT(DFN,.21)),NOK=$P(NA,U)\n- S MRK=0 I NOK=\"\" S NOK=\"Not Entered\",MRK=1\n+ S MRK=0 I $P($G(NA),U)=\"\" S NOK=\"Not Entered\",MRK=1\n  S N(1)=$P(NA,U,3),N(2)=$P(NA,U,4),N(3)=$P(NA,U,5),N(\"CIT\")=$P(NA,U,6)\n",
+          "candidate_sha1": "8c2428cf3dd61857c42ddeffcfea0b1a036990cf",
+          "final": true
+        }
+      ],
+      "n_attempts": 2,
+      "tool_calls": 8,
+      "agent_claimed_success": true,
+      "verified_equivalent": true,
+      "false_confidence": false,
+      "verdict": {
+        "task_id": "nok-ajetiu2",
+        "routine": "AJETIU2",
+        "equivalent": true,
+        "n_cases": 4,
+        "n_diverged": 0,
+        "n_void": 0,
+        "duration_ms": 3026,
+        "source": "live",
+        "headline": "EQUIVALENT \u2014 AJETIU2 candidate matched the baseline on all 4 case(s).",
+        "cases": [
+          {
+            "label": "DFN 3",
+            "why": "next-of-kin record present, name filled in -- the ordinary path",
+            "equivalent": true,
+            "n_void": 0,
+            "duration_ms": 807,
+            "divergences": []
+          },
+          {
+            "label": "DFN 4",
+            "why": "^DPT(4,.21) exists but every piece is empty -- no next-of-kin name",
+            "equivalent": true,
+            "n_void": 0,
+            "duration_ms": 755,
+            "divergences": []
+          },
+          {
+            "label": "DFN 86",
+            "why": "^DPT(86,.21) is a short node, name piece blank",
+            "equivalent": true,
+            "n_void": 0,
+            "duration_ms": 731,
+            "divergences": []
+          },
+          {
+            "label": "DFN 88",
+            "why": "^DPT(88,.21) present, name piece blank",
+            "equivalent": true,
+            "n_void": 0,
+            "duration_ms": 731,
+            "divergences": []
+          }
+        ]
+      },
+      "error": null,
+      "duration_ms": 6359
+    }
+  }
+}

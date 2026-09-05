@@ -9,10 +9,11 @@ variable, in a ``WRITE`` format list, or in a way that orphans a dot block.
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
-from rosetta.mutate.lex import TPCommandError, has_tp_command, parse_routine
+from rosetta.mutate.lex import MASK, TPCommandError, has_tp_command, parse_routine
 from rosetta.mutate.operators import (
     OPERATOR_NAMES,
     arg_order,
@@ -176,7 +177,7 @@ class NakedRefTests(unittest.TestCase):
         self.assertTrue(any("^(2)" in (g or "") for g in got))
 
     def test_introduces_a_naked_reference_after_a_prior_global(self) -> None:
-        src = "T ;h\nGO ;\n S X=^DPT(1,0)\n S Y=^DPT(1,3)\n Q\n"
+        src = "T ;h\nGO ;\n S X=^DPT(2,0)\n S Y=^DPT(1,3)\n Q\n"
         muts = [m for m in naked_ref(routine(src)) if m.detail == "introduce"]
         self.assertIn(" S Y=^(3)", lines_of(muts))
 
@@ -337,6 +338,224 @@ class ShortlistTests(unittest.TestCase):
             else:
                 self.assertEqual(len(got), len(base), m.key)
                 self.assertEqual(differing, [m.lineno - 1], m.key)
+
+
+@unittest.skipUnless(ROUTINE_DIR.is_dir(), "data/routines not extracted")
+class CompilerFindingsTests(unittest.TestCase):
+    """Regressions for the 26 defective mutants found by a real YottaDB compile.
+
+    Every case names the routine and line the defect was found at. Reconstructed
+    by compiling 206 generated mutants against YottaDB r2.06 in the
+    ``rosetta-verify`` container: 1 hard syntax error, 16 structurally
+    degenerate mutants (infinite loops, dead code) and 9 no-ops.
+    """
+
+    _cache: dict[str, list] = {}
+
+    @classmethod
+    def muts(cls, name: str, lineno: int | None = None, operator: str | None = None):
+        if name not in cls._cache:
+            src = (ROUTINE_DIR / f"{name}.m").read_text(errors="replace")
+            cls._cache[name] = mutate_routine(parse_routine(name, src))
+        return [
+            m
+            for m in cls._cache[name]
+            if (lineno is None or m.lineno == lineno)
+            and (operator is None or m.operator == operator)
+        ]
+
+    def details(self, name: str, lineno: int, operator: str) -> set[str]:
+        return {m.detail for m in self.muts(name, lineno, operator)}
+
+    # --- 1. a naked reference is not a legal lock resource name -----------
+
+    def test_naked_ref_never_targets_a_lock_argument(self) -> None:
+        # PRCPOENU line 27: `L +^PRCP(445,SDA,1):5` -> `L +^(1):5` is
+        # %YDB-E-LKNAMEXPECTED at column 82. The only hard syntax error found.
+        self.assertEqual(self.details("PRCPOENU", 27, "NAKED_REF"), set())
+        for m in self.muts("PRCPOENU", operator="NAKED_REF"):
+            self.assertNotIn("L +^(", m.mutated_line or "")
+
+    def test_lock_arguments_are_not_naked_ref_targets_in_any_form(self) -> None:
+        for form in ("L +^X(1,2)", "L -^X(1,2)", "L ^X(1,2)", "LOCK +^X(1,2)"):
+            src = f"T ;h\nGO ;\n S Y=^DPT(9,0)\n{form}\n Q\n"
+            self.assertEqual(
+                [m for m in naked_ref(routine(src)) if m.lineno == 4], [], form
+            )
+
+    # --- 2. POSTCOND must not delete a control-flow edge ------------------
+
+    def test_never_drops_a_goto_postconditional(self) -> None:
+        # `G DOUB:D` -> `G DOUB` jumps backwards: an infinite loop that hangs
+        # the harness. Same shape in ESPSOUN, which is a namespace copy.
+        for name in ("XUA4A71", "ESPSOUN"):
+            for lineno in (19, 24):
+                self.assertNotIn(
+                    "drop_argument_level",
+                    self.details(name, lineno, "POSTCOND"),
+                    f"{name} L{lineno}",
+                )
+        # PRCAFN1 8/9: `G NULL:'Y` -> `G NULL` makes the routine tail dead.
+        for lineno in (8, 9):
+            self.assertNotIn(
+                "drop_argument_level", self.details("PRCAFN1", lineno, "POSTCOND")
+            )
+
+    def test_never_drops_a_for_terminating_quit_postconditional(self) -> None:
+        # `F  S V=$O(..) Q:cond  D` -> `... Q  D`: the dot block never runs.
+        for name, lineno in (("IBBACDM", 16), ("IBCRU4", 76), ("PXRMEXED", 24)):
+            first = [
+                m
+                for m in self.muts(name, lineno, "POSTCOND")
+                if m.detail == "drop_quit"
+            ]
+            for m in first:
+                # only the trailing quit, which has nothing after it, may go
+                self.assertTrue(
+                    (m.mutated_line or "").rstrip().endswith(" Q"),
+                    f"{name} L{lineno}: {m.mutated_line}",
+                )
+
+    def test_never_drops_a_quit_that_guards_a_live_tail(self) -> None:
+        for name, lineno in (("VPSMRAR4", 23), ("YSASCSA", 27), ("SCTMAPI1", 37)):
+            self.assertNotIn(
+                "drop_quit", self.details(name, lineno, "POSTCOND"), f"{name} L{lineno}"
+            )
+
+    def test_still_inverts_every_one_of_those_postconditionals(self) -> None:
+        # invert_* was 100% clean in the compile sweep; it must not regress.
+        for name, lineno in (
+            ("VPSMRAR4", 23), ("YSASCSA", 27), ("SCTMAPI1", 37),
+            ("IBBACDM", 16), ("IBCRU4", 76), ("PXRMEXED", 24),
+        ):
+            self.assertIn(
+                "invert_quit", self.details(name, lineno, "POSTCOND"), f"{name} L{lineno}"
+            )
+
+    def test_a_quit_ending_a_bounded_for_may_still_lose_its_postconditional(self) -> None:
+        # LEXAS2 68: `F LEXP=LEXM:-1:1 Q:cond` -- the quit ends the loop, not
+        # the block, the loop is bounded, and line 69 still runs. Legitimate.
+        self.assertIn("drop_quit", self.details("LEXAS2", 68, "POSTCOND"))
+
+    def test_a_bare_quit_at_the_end_of_a_block_is_not_a_mutation(self) -> None:
+        src = "T ;h\nGO ;\n S X=1\n Q:X>3\nNEXT ;\n Q\n"
+        self.assertNotIn("drop_quit", {m.detail for m in postcond(routine(src))})
+
+    # --- 3. STMT_DROP must not freeze a loop ------------------------------
+
+    def test_never_drops_the_order_advance_of_an_unbounded_for(self) -> None:
+        for name, lineno in (
+            ("PXRMEXED", 24), ("PXRMEXED", 26), ("IBDF10A", 72),
+            ("IBBACDM", 16), ("IBCRU4", 76),
+        ):
+            for m in self.muts(name, lineno, "STMT_DROP"):
+                self.assertIn(
+                    "$O(", m.mutated_line or "", f"{name} L{lineno}: advance deleted"
+                )
+
+    def test_never_drops_a_by_reference_advance_from_a_loop_body(self) -> None:
+        # ECOBMC 64-66: `F  Q:+CHILD=-1  D` / `.D METHOD(.CHILD,...)`.
+        self.assertEqual(self.muts("ECOBMC", 66, "STMT_DROP"), [])
+        # ...but a line in the same block that only *reads* CHILD is still fair
+        # game, so the guard has not simply disabled the operator.
+        self.assertTrue(self.muts("ECOBMC", operator="STMT_DROP"))
+
+    def test_never_drops_a_set_that_feeds_a_backward_goto(self) -> None:
+        # XUA4A71 24: `S E=... G C:E[F Q` -- delete the SET and `E` is frozen.
+        self.assertEqual(self.muts("XUA4A71", 24, "STMT_DROP"), [])
+
+    def test_a_loop_initialiser_before_the_for_is_still_droppable(self) -> None:
+        drops = [
+            m.note for m in self.muts("IBDF10A", 72, "STMT_DROP")
+        ]
+        self.assertTrue(any('S LINE=""' in n for n in drops), drops)
+
+    # --- 4. NAKED_REF needs a knowable, distinguishable context -----------
+
+    def test_no_naked_ref_without_a_dominating_global_reference(self) -> None:
+        # FSCXREFO 41 sits three dot levels inside two IFs; nothing dominates
+        # it, so `^(120)` resolves against whatever FileMan last touched.
+        for m in self.muts("FSCXREFO", 41, "NAKED_REF"):
+            self.assertNotIn("^(120)", m.mutated_line or "")
+
+    def test_no_naked_ref_when_the_context_prefix_is_identical(self) -> None:
+        # `^DIZ(580431.04,DA(1),"S")` after `^DIZ(580431.04,DA(1),0)`:
+        # `^("S")` is byte-identical at run time, so the mutant is unkillable.
+        self.assertEqual(self.muts("AJK1UBDD", 50, "NAKED_REF"), [])
+        self.assertEqual(self.muts("IBDF10A", 62, "NAKED_REF"), [])
+        src = "T ;h\nGO ;\n S X=^DPT(1,0)\n S Y=^DPT(1,3)\n Q\n"
+        self.assertEqual(
+            [m for m in naked_ref(routine(src)) if m.detail == "introduce"], []
+        )
+
+    def test_no_naked_ref_behind_an_intervening_call(self) -> None:
+        # PRSAOTT 137 is reached only through `$$OTREQ`/`$$OTAPPR`, which run
+        # arbitrary global references in another frame.
+        self.assertEqual(self.muts("PRSAOTT", 137, "NAKED_REF"), [])
+
+    def test_no_naked_ref_that_discards_a_for_control_variable(self) -> None:
+        # ZZGENAPT 31: `F NEWAPPTID=1:1 I '$D(^SC(..,NEWAPPTID,0)) Q` -- the
+        # naked form is loop-invariant, so the loop never terminates.
+        self.assertEqual(self.muts("ZZGENAPT", 31, "NAKED_REF"), [])
+
+    # --- 5. BOUNDARY must not emit a clamped range start ------------------
+
+    def test_never_shifts_a_literal_range_start_below_one(self) -> None:
+        # $EXTRACT and $PIECE clamp a start below 1 up to 1, so `$E(x,0,4)` is
+        # `$E(x,1,4)`: unkillable. Verified against YottaDB r2.06.
+        for name, lineno in (("LEXAS2", 68), ("PRSAENT1", 105)):
+            for m in self.muts(name, lineno, "BOUNDARY"):
+                self.assertNotIn(",0,", m.mutated_line or "", f"{name} L{lineno}")
+            self.assertIn(
+                "e_range_start_plus1", self.details(name, lineno, "BOUNDARY")
+            )
+
+    def test_no_mutant_in_the_corpus_extracts_from_a_zero_range_start(self) -> None:
+        pattern = re.compile(r"\$(?:E|EXTRACT|P|PIECE)\([^()]*,0,", re.IGNORECASE)
+        for name in ("LEXAS2", "PRSAENT1", "IBDF10A", "PRCHUEI", "XLFSTR"):
+            for m in self.muts(name, operator="BOUNDARY"):
+                self.assertIsNone(pattern.search(m.mutated_line or ""), m.key)
+
+    # --- 6. dropping a $GET default needs a reaching-definition check -----
+
+    def test_never_drops_a_get_default_that_cannot_be_reached(self) -> None:
+        # LRPXAPI 52: lines 48/49 are an I/E pair that both assign MAX.
+        self.assertNotIn(
+            "get_drop_default", self.details("LRPXAPI", 52, "DOLLAR_MISUSE")
+        )
+        # LRPXAPI 67: `S ITEM=$G(ITEM,0)` -- "" and 0 take the identical path.
+        self.assertNotIn(
+            "get_drop_default", self.details("LRPXAPI", 67, "DOLLAR_MISUSE")
+        )
+
+    def test_an_empty_string_default_is_never_dropped(self) -> None:
+        muts = dollar_misuse(routine('T ;h\n S Y=$G(X,"")\n'))
+        self.assertNotIn("get_drop_default", {m.detail for m in muts})
+
+    def test_a_reachable_default_is_still_dropped(self) -> None:
+        muts = dollar_misuse(routine('T ;h\nGO(A) ;\n S Y=$G(B,"d")\n'))
+        self.assertIn("get_drop_default", {m.detail for m in muts})
+
+    # --- notes feed the published benchmark record ------------------------
+
+    def test_a_postcond_note_quotes_the_raw_source_not_the_masked_line(self) -> None:
+        src = 'T ;h\n Q:%1["T" 1\n'
+        notes = {m.detail: m.note for m in postcond(routine(src))}
+        self.assertEqual(notes["invert_quit"], 'inverted :%1["T"')
+
+    def test_no_note_leaks_the_string_mask_character(self) -> None:
+        for name in ("PRSAENT1", "IBDF10A", "LRPXAPI", "XUA4A71", "PRCPOENU"):
+            for m in self.muts(name):
+                self.assertNotIn(MASK, m.note, m.key)
+
+    def test_reassignment_is_judged_per_node_not_per_base_name(self) -> None:
+        # `S P(5)=0` does not overwrite `S P(3)=...`; claiming it did was a
+        # false provenance record on AJK1UBDD 50.
+        for m in self.muts("AJK1UBDD", 50, "STMT_DROP"):
+            self.assertNotIn("reassigned later", m.note)
+        src = "T ;h\nGO ;\n S P(3)=1\n S P(3)=2\n Q\n"
+        dropped = [m for m in stmt_drop(routine(src)) if m.lineno == 3]
+        self.assertTrue(any("reassigned later" in m.note for m in dropped))
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -9,3 +9,8 @@ dist/
 .claude/settings.local.json
 data/snapshots/
 .rosetta-worktrees/
+
+# Benchmark run output. results/canned/ IS committed -- the demo's
+# offline path depends on it surviving a clone.
+results/*
+!results/canned/
