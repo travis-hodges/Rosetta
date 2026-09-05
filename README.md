@@ -27,6 +27,9 @@ python3 orchestration/orchestrator.py setup-github
 python3 orchestration/orchestrator.py install
 ```
 
+The current installation is intentionally temporary. A one-shot LaunchAgent is
+scheduled to permanently remove the background service and all of its runtime
+state three days after installation; it does not delete this repository.
+
 See [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) for the lifecycle, security
 boundary, configuration, and operations.
-

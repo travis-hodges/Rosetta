@@ -29,12 +29,21 @@ python3 orchestration/orchestrator.py doctor
 python3 orchestration/orchestrator.py setup-github
 python3 orchestration/orchestrator.py poll-once
 python3 orchestration/orchestrator.py install
+python3 orchestration/orchestrator.py schedule-expiry --days 3
 python3 orchestration/orchestrator.py status
 ```
 
 `install` creates and starts a per-user macOS LaunchAgent. Logs, worktrees, and
 per-issue Codex output live under `.git/rosetta-orchestrator/` and are never
 committed.
+
+`schedule-expiry` installs a separate one-shot LaunchAgent. At the deadline it
+removes the main service definition, terminates active issue agents, unloads the
+service, removes registered orchestration worktrees, recursively deletes all
+runtime state, and finally deletes its own installed helper and LaunchAgent.
+The Git repository and GitHub repository remain intact as an audit trail. The
+calendar trigger survives reboot and executes after the next login/wake if the
+Mac is unavailable at the exact deadline.
 
 ## Configuration
 
@@ -62,4 +71,3 @@ The installed LaunchAgent uses the defaults captured by the installer. Re-run
 
 Do not make the repository public without revisiting the author allowlist and
 the risk of executing untrusted issue content or repository code.
-

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import dataclasses
+import datetime as dt
 import fcntl
 import json
 import os
@@ -33,6 +34,7 @@ LABELS = {
 }
 ROLE_LABELS = ("agent:builder", "agent:researcher", "agent:reviewer")
 SERVICE_LABEL = "com.rosetta.codex-orchestrator"
+EXPIRY_LABEL = f"{SERVICE_LABEL}.expiry"
 
 
 class CommandError(RuntimeError):
@@ -212,6 +214,8 @@ class Orchestrator:
         self.sandbox = os.getenv("ROSETTA_SANDBOX", "workspace-write")
         if self.sandbox not in {"workspace-write", "danger-full-access"}:
             raise ValueError("ROSETTA_SANDBOX must be workspace-write or danger-full-access")
+
+    def _ensure_state(self) -> None:
         self.state.mkdir(parents=True, exist_ok=True)
         self.worktrees.mkdir(parents=True, exist_ok=True)
         self.logs.mkdir(parents=True, exist_ok=True)
@@ -320,6 +324,7 @@ Issue author (validated by the runner): {issue.author}
         return True
 
     def _branch_and_worktree(self, issue: Issue) -> tuple[str, Path]:
+        self._ensure_state()
         branch = f"codex/issue-{issue.number}-{slugify(issue.title)}"
         worktree = self.worktrees / f"issue-{issue.number}"
         if worktree.exists():
@@ -345,6 +350,7 @@ Issue author (validated by the runner): {issue.author}
         stderr_path = issue_log / "stderr.log"
         final_path = issue_log / "final.md"
         prompt_path = issue_log / "prompt.md"
+        pid_path = issue_log / "codex.pid"
         prompt = self.build_prompt(issue)
         prompt_path.write_text(prompt, encoding="utf-8")
 
@@ -361,15 +367,21 @@ Issue author (validated by the runner): {issue.author}
             "-",
         ]
         with events_path.open("w", encoding="utf-8") as events, stderr_path.open("w", encoding="utf-8") as errors:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 cwd=worktree,
-                input=prompt,
                 text=True,
+                stdin=subprocess.PIPE,
                 stdout=events,
                 stderr=errors,
-                check=False,
+                start_new_session=True,
             )
+            pid_path.write_text(str(process.pid), encoding="utf-8")
+            try:
+                process.communicate(prompt)
+            finally:
+                if process.poll() is not None:
+                    pid_path.unlink(missing_ok=True)
 
         final_message = final_path.read_text(encoding="utf-8") if final_path.exists() else ""
         thread_id: str | None = None
@@ -382,7 +394,7 @@ Issue author (validated by the runner): {issue.author}
                 if event.get("type") == "thread.started":
                     thread_id = event.get("thread_id")
                     break
-        return completed.returncode, final_message.strip(), thread_id
+        return process.returncode, final_message.strip(), thread_id
 
     def process(self, queued: Issue) -> None:
         issue = self.github.issue(queued.number)
@@ -453,6 +465,7 @@ Issue author (validated by the runner): {issue.author}
                     print(f"Failed issue #{issue.number}: {exc}", file=sys.stderr)
 
     def serve(self) -> None:
+        self._ensure_state()
         lock_path = self.state / "service.lock"
         lock_file = lock_path.open("w", encoding="utf-8")
         try:
@@ -490,6 +503,7 @@ Issue author (validated by the runner): {issue.author}
 
     def install(self) -> Path:
         self.doctor()
+        self._ensure_state()
         launch_agents = Path.home() / "Library" / "LaunchAgents"
         launch_agents.mkdir(parents=True, exist_ok=True)
         plist_path = launch_agents / f"{SERVICE_LABEL}.plist"
@@ -524,6 +538,62 @@ Issue author (validated by the runner): {issue.author}
         print(f"Installed and started {SERVICE_LABEL}: {plist_path}")
         return plist_path
 
+    def schedule_expiry(self, days: float) -> tuple[Path, dt.datetime]:
+        if days <= 0:
+            raise ValueError("Expiry delay must be greater than zero days")
+        self.doctor()
+        launch_agents = Path.home() / "Library" / "LaunchAgents"
+        service_plist = launch_agents / f"{SERVICE_LABEL}.plist"
+        if not service_plist.exists():
+            raise RuntimeError(f"The main LaunchAgent is not installed: {service_plist}")
+
+        service_target = f"gui/{os.getuid()}/{SERVICE_LABEL}"
+        if run(["launchctl", "print", service_target], check=False).returncode != 0:
+            raise RuntimeError("The main LaunchAgent is not loaded; refusing to schedule a false expiry")
+
+        expires_at = dt.datetime.now().astimezone() + dt.timedelta(days=days)
+        expiry_epoch = expires_at.timestamp()
+        expiry_plist = launch_agents / f"{EXPIRY_LABEL}.plist"
+        support_dir = Path.home() / "Library" / "Application Support" / "RosettaOrchestrator"
+        support_dir.mkdir(parents=True, exist_ok=True)
+        installed_expirer = support_dir / "expire_service.py"
+        shutil.copy2(self.root / "orchestration" / "expire_service.py", installed_expirer)
+
+        payload = {
+            "Label": EXPIRY_LABEL,
+            "ProgramArguments": [
+                sys.executable,
+                str(installed_expirer),
+                "--not-before",
+                str(expiry_epoch),
+                "--repository-root",
+                str(self.root),
+                "--state-dir",
+                str(self.state),
+                "--service-plist",
+                str(service_plist),
+                "--expiry-plist",
+                str(expiry_plist),
+                "--support-dir",
+                str(support_dir),
+            ],
+            "StartCalendarInterval": {
+                "Month": expires_at.month,
+                "Day": expires_at.day,
+                "Hour": expires_at.hour,
+                "Minute": expires_at.minute,
+            },
+            "ProcessType": "Background",
+        }
+        with expiry_plist.open("wb") as stream:
+            plistlib.dump(payload, stream)
+
+        domain = f"gui/{os.getuid()}"
+        run(["launchctl", "bootout", domain, str(expiry_plist)], check=False)
+        run(["launchctl", "bootstrap", domain, str(expiry_plist)])
+        print(f"Self-destruction scheduled for {expires_at.isoformat(timespec='seconds')}")
+        return expiry_plist, expires_at
+
     def status(self) -> None:
         domain = f"gui/{os.getuid()}/{SERVICE_LABEL}"
         completed = run(["launchctl", "print", domain], check=False)
@@ -532,6 +602,19 @@ Issue author (validated by the runner): {issue.author}
             print(f"LaunchAgent loaded ({', '.join(lines) or 'status available'}).")
         else:
             print("LaunchAgent is not loaded.")
+        expiry_plist = Path.home() / "Library" / "LaunchAgents" / f"{EXPIRY_LABEL}.plist"
+        if expiry_plist.exists():
+            with expiry_plist.open("rb") as stream:
+                payload = plistlib.load(stream)
+            arguments = payload.get("ProgramArguments", [])
+            try:
+                expiry_epoch = float(arguments[arguments.index("--not-before") + 1])
+                expiry = dt.datetime.fromtimestamp(expiry_epoch).astimezone()
+                print(f"Permanent self-destruction scheduled: {expiry.isoformat(timespec='seconds')}")
+            except (ValueError, IndexError):
+                print(f"Expiry LaunchAgent exists but its deadline could not be parsed: {expiry_plist}")
+        else:
+            print("No self-destruction is scheduled.")
         print(f"State directory: {self.state}")
 
 
@@ -543,8 +626,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("doctor", "setup-github", "poll-once", "serve", "install", "status"),
+        choices=("doctor", "setup-github", "poll-once", "serve", "install", "schedule-expiry", "status"),
     )
+    parser.add_argument("--days", type=float, default=3.0, help="Delay for schedule-expiry (default: 3 days)")
     args = parser.parse_args(argv)
     orchestrator = Orchestrator(repository_root())
     try:
@@ -560,6 +644,8 @@ def main(argv: list[str] | None = None) -> int:
             orchestrator.serve()
         elif args.command == "install":
             orchestrator.install()
+        elif args.command == "schedule-expiry":
+            orchestrator.schedule_expiry(args.days)
         elif args.command == "status":
             orchestrator.status()
     except Exception as exc:
