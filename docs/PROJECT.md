@@ -1092,10 +1092,13 @@ Zero dependencies means zero chance it breaks at hour 35. Reads `results/summary
 Build from hour 0 in parallel. It has no dependencies and it's the artifact that survives
 the weekend.
 
-> **Current state:** implemented at the repository root (`index.html`, `src/`) as a Vite
-> project rather than a single inline-everything file, because that is what the Vercel
-> deployment expects. The self-contained single-file requirement above still stands for the
-> demo-day artifact and is not yet satisfied.
+> **Current state:** satisfied. `web/index.html` is a self-contained file with inline CSS
+> and JS covering all eight sections above. It opens offline with no build step; a
+> dependency-free Node script copies it to `dist/` for Vercel. The benchmark panel is
+> populated only from `results/summary.json` and shows an explicit pending state otherwise
+> — never sample figures. An account/login portal was proposed and **removed**: Rosetta
+> holds no customer credentials or code, and a sign-in surface contradicts the air-gapped
+> pitch. `tests/web.test.mjs` guards that the route stays gone.
 
 ---
 
@@ -1329,3 +1332,4 @@ minutes.
 *Figures cited from secondary sources (market sizing, migration failure rates, batch job
 counts) should be treated as indicative rather than precise. Primary GAO and DOL figures
 are as reported in the linked documents.*
+

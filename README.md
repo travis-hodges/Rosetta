@@ -77,14 +77,22 @@ The installation is intentionally temporary. A one-shot LaunchAgent permanently 
 background service and all of its runtime state three days after installation; it does not
 delete this repository.
 
-## Landing page
+## Website
 
-The repository root holds Rosetta's Vite-powered landing page (`index.html`, `src/`), built
-against the specification in `docs/PROJECT.md` §10.
+The product website lives in [`web/index.html`](web/index.html): one self-contained,
+offline-capable HTML file with inline CSS, JavaScript, and original vector/canvas artwork.
+Open it directly in a browser, or serve it locally with Node 22+:
 
 ```bash
-npm install
 npm run dev
+npm test
+npm run build
+npm run preview
 ```
 
-Create the production bundle with `npm run build`.
+No package installation is needed. The optional build copies the site to `dist/` for
+Vercel. Home, downloads, and account views use hash routes so they also work offline.
+
+See [`web/README.md`](web/README.md) for release links, account integration, the benchmark
+report contract, and verification limits. Login and installers stay explicitly unavailable
+until real services and release artifacts are configured.
