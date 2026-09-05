@@ -1,0 +1,48 @@
+PXAIERR ;ISL/JVS,PKR - Set error array. ;Aug 04, 2025@08:28:16
+ ;;1.0;PCE PATIENT CARE ENCOUNTER;**211,244**;Aug 12, 1996;Build 37
+ ;
+SETPROB ;--Put errors into PXAPROB.
+ I PXADI("DIALOG")=8390001.001 D  Q
+ . S PXASUB=PXASUB+1
+ . S PXAPROB($J,PXASUB,"ERROR1",PXAERR(7),PXAERR(9),PXAK)=$G(PXAERR(12))
+ . I $G(PXAERR(13))'="" S PXAPROB($J,PXASUB,"ERROR2",PXAERR(7),PXAERR(9),PXAK)=$G(PXAERR(13))
+ ;
+ I PXADI("DIALOG")=8390001.002 D  Q
+ . S PXASUB=PXASUB+1
+ . S PXAPROB($J,PXASUB,"WARNING2",PXAERR(7),PXAERR(9),PXAK)=$G(PXAERR(12))
+ ;
+ I PXADI("DIALOG")=8390001.003 D  Q
+ . ;W !,"IN SETPROB^PXAIERR" BREAK
+ . N WARNSUB
+ . S PXASUB=PXASUB+1
+ . S WARNSUB=""
+ . F  S WARNSUB=$O(PXAERR(WARNSUB)) Q:WARNSUB=""  D
+ .. I (WARNSUB'["W") Q
+ .. I PXAERR(WARNSUB)="" Q
+ .. S PXAPROB($J,PXASUB,"WARNING3","ENCOUNTER",1,WARNSUB)=PXAERR(WARNSUB)
+ . ;W !,"SETPROB^PXAIERR, PXAPROB set" BREAK
+ ;
+ I PXADI("DIALOG")=8390001.004 D
+ . S PXASUB=PXASUB+1
+ . S PXAPROB($J,PXASUB,"ERROR4","PX/DL",PXAK)=$G(PXAERR("PL1"))
+ Q
+ ;
+ ;===============
+NUMWARNINGS(PXAERR) ;Calculate the number of warnings that are defined.
+ N NUMW,SUB
+ S NUMW=0,SUB=""
+ F  S SUB=$O(PXAERR(SUB)) Q:SUB=""  D
+ . I SUB["W" S NUMW=NUMW+1
+ Q NUMW
+ ;
+ ;===============
+SSCL(SCL) ;Populate the site support contact list. Return a maximum of three.
+ N IND,JND,TEMP
+ S (IND,JND)=0
+ F  S IND=+$O(^PX(815,1,900,IND)) Q:(IND=0)!(JND>2)  D
+ . S TEMP=$G(^PX(815,1,900,IND,0))
+ . S JND=JND+1
+ . S SCL(900+JND)=$P(TEMP,U,1)_"; "_$P(TEMP,U,2)_"; "_$P(TEMP,U,3)_"; "_$P(TEMP,U,4)
+ I JND=0 S SCL(901)="No PCE support contacts are defined for this site!"
+ Q
+ ;

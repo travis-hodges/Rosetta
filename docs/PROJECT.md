@@ -543,9 +543,53 @@ Rosetta/
 
 The only module that knows about YottaDB. Everything else talks through the contract.
 
-**Snapshot strategy.** M globals are just files. Snapshot the global directory `.dat` files
-before a run, restore after — seconds, not minutes. Fallback if unreliable: wrap execution
-in `TSTART`/`TROLLBACK`.
+**Isolation strategy.** *Amended 2026-09-05 from measurement; the original plan inverted
+these.* Wrap execution in a YottaDB TP frame — `TSTART ():SERIAL` / `TROLLBACK` — as the
+PRIMARY mechanism. Rollback costs 22µs–1.8ms and is near-constant in transaction size
+(50,000 nodes roll back in 0.15ms); TP adds no measurable execution overhead. The `.dat`
+file copy is the REPAIR path only: `vehu.dat` is 3.43GB and a copy takes **21.5 seconds**,
+which is fatal in a per-case loop. Use it to recover after a voided frame or a
+`TRANS2BIG`, never in the hot path.
+
+**TP guards are not optional.** Six failure modes were reproduced in the live container;
+two corrupt silently rather than erroring. An unbalanced `TCOMMIT` from the code under
+test commits *our* frame to the live database with no error; a bare `TROLLBACK` collapses
+`$TLEVEL` to 0 and destroys the frame, after which writes go through unprotected. Guard by
+asserting `$TLEVEL` immediately after the routine under test returns — a drop below entry
+level makes the case **void**, never scored — and by rejecting command-position
+`TSTART`/`TCOMMIT`/`TROLLBACK` in `load_routine`. This costs nothing: across all 39,612
+routines in the image there are **zero** command-position TP commands, so only mutated or
+model-generated source can reach these modes. Also: hold zero M locks when opening a frame
+(`TPLOCK` is a hard error), set a non-recursive `$ETRAP` (an uncaught error leaves
+`$TLEVEL>0` and drops into direct mode, then `NOPRINCIO` — a hang over a pipe), and treat
+worker death from `HALT` as a result, not a crash.
+
+**A dedicated, quiesced container is required.** YottaDB silently restarts a TP transaction
+when another process touches its read set — reproduced live, because the stock image runs
+~148 mumps processes (TaskMan submanagers, `rocto`, `%ydbgui`, HL7/RPC/VistaLink listeners)
+against the same region. On restart the body re-executes, device output is **not** rolled
+back and duplicates, and locals not named in `TSTART (...)` are not restored. Capture
+stdout to a global inside the frame, never to a device; latch `$TRESTART` and discard the
+case if it fired.
+
+**One long-lived worker, not one process per case.** `docker exec` plus `mumps -run` costs
+448ms per invocation, which dominates every realistic cycle. Drive a single supervised M
+worker over a pipe and respawn it on death.
+
+**Capturing `globals_out` is not free.** Journal inspection is ruled out — rolled-back work
+produces no journal records at all. A full `$QUERY` walk is unusable (`^DPT` is 115,882
+nodes / 2–4s at ~15µs/node). Scoped subtree walks are 2–3ms and are the default, narrowed
+by the static global refs `bench/select.py` already extracts. Triggers are the fallback for
+write sets that cannot be bounded statically, at 4.29µs/SET versus 0.96µs without, and
+carry three constraints: `$ZTRIGGER` inside TP silently no-ops so triggers must be
+installed before `TSTART`; definitions are per-(global, subscript depth); and trigger code
+runs in an isolated local scope, so it must log to a global that is harvested into a driver
+local *before* rollback.
+
+**Measured throughput.** A realistic `LIST^DIC` cycle over 20 patients runs at 116/s; a
+FileMan `FILE^DIE` write cycle at 18/s. `TRANS2BIG` caps a transaction at roughly 8MB /
+~2,000 dirty blocks. Figures are from x86-64 emulation on an arm64 host — treat them as a
+floor.
 
 **Why global-state diffing is non-negotiable.** In MUMPS the globals *are* the database. A
 routine returning the right value while corrupting `^DPT` is the real VistA failure mode,
@@ -641,10 +685,27 @@ familiarity**; tools buy **correctness** at inference time.
 ## 7. The frozen contract
 
 `rosetta/core/interface.py`. All streams build against this. Do not change without
-announcing.
+announcing. *Amended 2026-09-05 after the TP viability probe: `clean_state()` is now the
+primary isolation API, and `snapshot()`/`restore()` are documented as the `.dat` repair
+path. The originally-specified `snapshot() -> str` / `restore(snap_id)` pairing does not
+map onto TP at all — a TP frame is scoped to one M process's stack, so there is no id to
+hand back and no out-of-order restore. `ExecResult` gained `restarts` and `void`, and
+`VerifyReport` gained `n_void`, because a silently restarted or frame-voided case carries
+no trustworthy information and must never be scored.*
+
+The block below is the file verbatim; if they ever differ, the file wins.
 
 ```python
-"""Rosetta core contract. FROZEN."""
+"""Rosetta core contract. FROZEN.
+
+Do not modify the dataclasses or signatures in this file. Every workstream builds
+against it. If a change looks necessary, stop and report rather than editing.
+
+ISOLATION: `clean_state()` is the primary mechanism and wraps the body in a YottaDB
+TP frame (TSTART/TROLLBACK). `snapshot()`/`restore()` are the .dat-copy REPAIR path,
+used only when a TP frame is voided or exceeds buffer space -- they cost ~20s against
+a 3.4GB region and must not appear in the per-case hot loop. See docs/PROJECT.md #6.
+"""
 
 from __future__ import annotations
 from contextlib import contextmanager
@@ -667,11 +728,26 @@ class ExecSpec:
 class ExecResult:
     """Observable result. globals_out is half the verification signal --
     a routine can return a correct value and still corrupt the database.
-    error holds the MUMPS code (M6, M7...); an error IS a divergence."""
+    error holds the MUMPS code (M6, M7...); an error IS a divergence.
+
+    stdout is captured to a global inside the TP frame, never to a device:
+    YottaDB may silently restart a transaction, and device writes are not
+    rolled back, so device-captured output duplicates across restarts.
+
+    restarts exposes $TRESTART at end of body. Any value > 0 means the body
+    ran more than once; the caller must discard and re-run the case.
+
+    void means frame integrity was lost mid-execution -- the code under test
+    collapsed $TLEVEL via an unbalanced TCOMMIT or a bare TROLLBACK. A void
+    result carries NO information and must never be scored. Recover with
+    restore() and respawn the worker.
+    """
     stdout: str
     error: str | None
     globals_out: dict[str, str]
     duration_ms: int
+    restarts: int = 0
+    void: bool = False
 
 
 DivergenceKind = Literal["output", "global", "error", "timeout"]
@@ -694,26 +770,60 @@ class VerifyReport:
     divergences: list[Divergence]
     n_cases: int
     n_diverged: int
+    n_void: int = 0          # cases that produced no trustworthy result
 
     def summary(self) -> str: ...
 
 
 # --- API ---
 
-def snapshot() -> str:
-    """Capture global state via YottaDB .dat file copy. Sub-second required."""
-
-def restore(snap_id: str) -> None: ...
-
 @contextmanager
 def clean_state() -> Iterator[None]:
-    """Snapshot on entry, restore on exit. Use around EVERY execution.
-    An unrestored run silently poisons every subsequent test."""
+    """PRIMARY isolation. Open a TP frame on entry, TROLLBACK on exit.
+
+    Rollback is 22us-1.8ms and near-constant in transaction size. Use around
+    EVERY execution; an unrestored run silently poisons every subsequent test.
+
+    Preconditions the implementation must enforce:
+      - hold ZERO M locks when opening the frame (TPLOCK is a hard error)
+      - assert $TLEVEL on exit; if it dropped below entry level the case is void
+      - name every capture local in TSTART (...) or reconstruct capture after
+        the body, since a restart does not restore unlisted locals
+    Raises on TRANS2BIG (~8MB / ~2000 dirty blocks); the caller falls back to
+    snapshot()/restore() for that case and marks the task heavyweight.
+    """
+
+
+def snapshot() -> str:
+    """FALLBACK repair path. Copy the YottaDB .dat region files.
+
+    ~20s against a 3.4GB region. This is NOT the per-case mechanism -- it exists
+    to recover after a voided frame or a TRANS2BIG. Returns a snapshot id.
+    """
+
+
+def restore(snap_id: str) -> None:
+    """Restore regions captured by snapshot(). Same ~20s cost."""
+
 
 def load_routine(name: str, source: str) -> None:
-    """Write source into the environment and compile. Raise with M code on failure."""
+    """Write source into the environment and compile. Raise with M code on failure.
 
-def execute(spec: ExecSpec) -> ExecResult: ...
+    MUST reject source containing command-position TSTART, TCOMMIT or TROLLBACK.
+    Real VistA never uses TP (zero occurrences across 39,612 routines), but a
+    mutated or model-generated candidate that emits TCOMMIT would silently commit
+    the verifier's own frame to the live database with no error raised.
+    """
+
+
+def execute(spec: ExecSpec) -> ExecResult:
+    """Run one spec in a long-lived M worker process.
+
+    Do NOT fork per case: `docker exec` + `mumps -run` costs ~448ms, which
+    dominates every realistic cycle. One supervised worker over a pipe.
+    Treat worker death (HALT in the body) as error="HALT" and respawn.
+    """
+
 
 def verify_equivalence(
     routine: str,
@@ -723,10 +833,10 @@ def verify_equivalence(
 ) -> VerifyReport:
     """Decide behavioral equivalence of two versions of one routine.
 
-    Per case: load baseline, snapshot, execute, capture, restore; load
-    candidate, execute, capture, restore. Diff stdout, error code, and
-    globals_out. Collect EVERY divergence -- do not early-return, the
-    repair loop wants the full picture.
+    Per case, inside clean_state(): load baseline, execute, capture, roll back;
+    load candidate, execute, capture, roll back. Diff stdout, error code, and
+    globals_out. Collect EVERY divergence -- do not early-return, the repair
+    loop wants the full picture. Void cases are counted, never scored.
 
     This function is the entire project. Write it boringly and test it
     against a real routine with a real mutation.
@@ -881,13 +991,22 @@ A mutant is admitted only if:
 
 ### Train/eval split — the discipline that protects every number
 
-**Split routines, not tasks.** Two tasks from one routine share structure, identifiers and
-global references. Splitting at task level leaks, and a sharp judge will ask.
+**Split routines, not tasks** — and split by *duplicate cluster*, not by routine.
+*Amended 2026-09-05.* Two tasks from one routine share structure, identifiers and global
+references, so task-level splitting leaks. But routine-level splitting also leaks: VistA
+carries the same algorithm under multiple namespaces. `GMTSUMX3.m` and `SROGMTS2.m` are
+byte-identical after comment stripping — same tags, same word lists, same typo
+(`MOUNTIAN`) — because someone copied the Health Summary routine into the Surgery
+namespace in 2001. There are **40 near-duplicate clusters** in the eligible pool. If
+`GMTSUMX3` lands in train and `SROGMTS2` in eval you have leaked, and the lock file will
+say you did not.
 
 1. Enumerate candidate routines.
-2. Partition the **routine list** 70/30.
-3. Write `data/tasks/split.lock.json` with both lists and a content hash.
-4. Never write that file again. Every generator reads it.
+2. Cluster near-duplicates (`select.py` emits `duplicate_clusters` and per-candidate
+   `duplicate_cluster` / `duplicate_siblings`).
+3. Partition the **cluster list** 70/30, so siblings never straddle the split.
+4. Write `data/tasks/split.lock.json` with both lists and a content hash.
+5. Never write that file again. Every generator reads it.
 
 If asked "did you train on your eval?", the answer must be a file, not a claim.
 
@@ -896,9 +1015,26 @@ If asked "did you train on your eval?", the answer must be a file, not a claim.
 Rank by tractability, not interest.
 
 - **Prefer** computational routines — validation, formatting, date arithmetic, lookup logic
-- **Avoid** RPC broker entry points, screen/UI handlers, terminal I/O, job spawning
-- **Score** by call-graph fan-out (lower better) and distinct global references (lower better)
-- Target 40–60 routines yielding 200+ tasks
+- **Avoid** RPC broker entry points, screen/UI handlers, terminal I/O, job spawning.
+  Use VistA's own dictionaries rather than guessing from names: `^XWB(8994,` lists 1,552
+  RPC entry points, `^DIC(19,` field 26 lists 2,594 menu options, `^ORD(101,` field 20
+  lists 1,245 protocol entry actions, `^XPD(9.6,` lists 3,769 KIDS install routines.
+- **Score** by call-graph fan-out (lower better) and distinct global references (lower
+  better), plus **transitive reach at 3 hops** — a routine with fan-out 1 and no globals of
+  its own can still pull in six globals through a callee that reads its arguments off the
+  symbol table (`AJETIU4` does exactly this via `VADPT`).
+- **Score by entry coverage** — the fraction of code lines reachable from a formal-argument
+  entry. *Added 2026-09-05; it is the single most discriminating signal.* The mixed-case
+  family (`LEXXM2/3/4/5/6`, `GMTSUMX2/3`) scores well on every obvious metric — small, no
+  globals, no fan-out, string manipulation — and is uniformly bad, because the real logic
+  sits in tags reading `X`, `LEXORG`, `LEXPRE` from the caller's frame and only trivial
+  helpers take formal arguments. Entry coverage drops all of them (LEXXM2 0.10,
+  GMTSUMX3 0.14).
+- **Watch for local-variable leakage.** A routine with no `NEW` (e.g. `PSBVT1`) corrupts
+  the caller's symbol table. Global-state diffing will pass while the damage is real.
+- Target 40–60 routines yielding 200+ tasks. Supply is not the constraint: 1,942 routines
+  survive hard exclusion and the top 60 alone offer ~380 clean formal-argument entry
+  points. Killability and input-suite separation will bind first.
 
 ### Input suite generation
 

@@ -1,0 +1,32 @@
+ORGMRC ;SP/WAT - GMRC Parameter Values for CPRS GUI ;Oct 27, 2023@13:04:24
+ ;;3.0;ORDER ENTRY/RESULTS REPORTING;**608**;Dec 17, 1997;Build 15
+ Q
+ ; Reference to ^XPAR supported by ICR #2263
+ ;;Load any parameter values for CPRS GUI
+ ;;This routine replaces ORDSTCTB that was exported in OR*3.0*519, and 539.
+ ;;Called from JSYSPARM^ORWU
+GETPAR(ORRESULTS,ORUSER) ;get parameters
+ D CONSPARM,GETCTB
+ Q
+CONSPARM ;get consult order params
+ S ORRESULTS("consultFutureDateLimit")=$$GET^XPAR("ALL","ORCDGMRC FUTURE DATE LIMIT",1,"I")
+ Q
+GETCTB ;load values into array
+ S ORRESULTS("ctbOrderConsult")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB ORDER CNSLT",1,"I")
+ S ORRESULTS("ctbReceive")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB RECEIVE",1,"I")
+ S ORRESULTS("ctbSchedule")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB SCHEDULE",1,"I")
+ S ORRESULTS("ctbCancel")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB CANCEL",1,"I")
+ S ORRESULTS("ctbEditRes")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB EDITRES",1,"I")
+ S ORRESULTS("ctbDC")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB DC",1,"I")
+ S ORRESULTS("ctbForward")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB FORWARD",1,"I")
+ S ORRESULTS("ctbComment")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB COMMENT",1,"I")
+ S ORRESULTS("ctbSigFind")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB SIGFIND",1,"I")
+ S ORRESULTS("ctbAdminComp")=+$$GET^XPAR("SYS^PKG","ORQQCN CTB ADMIN COMP",1,"I")
+ S ORRESULTS("dstCtbSwitch")=$$GET^XPAR("ALL","ORQQCN DST/CTB FEATURE SWITCH",1,"I")
+ S ORRESULTS("dstProdUrl")=$$GET^XPAR("ALL","ORQQCN DST PROD URL",1,"I")
+ S ORRESULTS("dstTestUrl")=$$GET^XPAR("ALL","ORQQCN DST TEST URL",1,"I")
+ S ORRESULTS("dstPath")=$$GET^XPAR("ALL","ORQQCN DST PATH",1,"I")
+ S ORRESULTS("ctbPath")=$$GET^XPAR("ALL","ORQQCN CTB PATH",1,"I")
+ S ORRESULTS("dstDecisionApi")=$$GET^XPAR("ALL","ORQQCN DST CONS DECISION",1,"I")
+ S ORRESULTS("dstSaveApi")=$$GET^XPAR("ALL","ORQQCN DST CONS SAVE",1,"I")
+ Q
