@@ -1,11 +1,40 @@
 # Claude guidance for Rosetta
 
+## READ THIS FIRST — what Rosetta is
+
+**Rosetta is a verification system for AI modification of legacy code in languages almost
+nobody can read** — MUMPS, COBOL, JOVIAL, CMS-2. Run the real code, apply the change, run
+it again, diff the output *and* the database state, so correctness is machine-checkable
+rather than a matter of opinion. First proving ground is MUMPS/VistA under YottaDB. The
+task is safe modification, not translation. **That is the project.**
+
+**Rosetta is NOT the GitHub-issue orchestration service in `orchestration/`.** That service
+is build infrastructure that produces Rosetta — scaffolding, not the thing being built, and
+temporary besides. If asked "what is Rosetta?" and you are about to answer with anything
+about issues, worktrees, or pull requests, you are wrong. Read
+[`docs/PROJECT.md`](docs/PROJECT.md).
+
+When the user says "the project" or "our project," they mean the verification system,
+unless they are plainly discussing the orchestrator itself.
+
+## Which file governs
+
 `AGENTS.md` is the source of truth for agent behavior in this repository. This
 file only explains how a Claude session complies with it. If the two ever
 disagree, follow `AGENTS.md` and report the conflict instead of resolving it
 silently.
 
-Read `AGENTS.md`, `README.md`, and `docs/ORCHESTRATION.md` before acting.
+Read in this order before acting: [`docs/PROJECT.md`](docs/PROJECT.md) (what Rosetta is),
+`AGENTS.md` (how to behave), `README.md`, and `docs/ORCHESTRATION.md` (only if your task
+touches the build service).
+
+## Product hard rules
+
+Work on Rosetta itself is governed by `AGENTS.md` § "Product hard rules" and
+`docs/PROJECT.md` §11. The load-bearing ones: `rosetta/core/interface.py` is **frozen**;
+only `rosetta/core/` touches YottaDB; always `clean_state()` around execution; never
+rewrite `data/tasks/split.lock.json`; fail loudly rather than swallowing errors in the
+verifier; and do not re-propose an approach already rejected in `docs/PROJECT.md` §5.
 
 ## When Claude may work an issue
 
