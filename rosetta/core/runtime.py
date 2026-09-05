@@ -140,6 +140,29 @@ class Runtime:
         except (WorkerError, OSError):
             pass
         self.worker.stop()
+        self._remove_sandbox()
+
+    def _remove_sandbox(self) -> None:
+        """Delete this Runtime's private routine directory.
+
+        Each Runtime creates one, and a crashed run leaves it behind along with
+        its relink control files. A real session accumulated 334 of them before
+        anyone noticed, so cleanup is part of close() rather than a chore.
+        Best effort: failing to tidy up must never mask the real result.
+        """
+        cfg = self.config
+        path = cfg.private_dir
+        # Refuse to rm -rf anything that is not clearly one of our sandboxes.
+        if "/rt/" not in path or not cfg.session or path.count("/") < 4:
+            log.warning("refusing to remove implausible sandbox path %r", path)
+            return
+        try:
+            subprocess.run(
+                [cfg.docker, "exec", cfg.container, "rm", "-rf", path],
+                capture_output=True, timeout=20, check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            log.debug("sandbox cleanup skipped for %s: %s", path, exc)
 
     def __enter__(self) -> "Runtime":
         self.worker.ensure_started()

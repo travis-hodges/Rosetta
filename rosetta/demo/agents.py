@@ -1,0 +1,311 @@
+"""The thing being measured: an agent that proposes a change to a routine.
+
+Two backends, and the difference between them matters enough that every trace
+record carries the backend name.
+
+``ScriptedAgent`` (``backend="scripted"``)
+    Deterministic, offline, no model. It replays a fixed pair of rewrites --
+    the plausible-looking wrong one, then a correct one if and only if it is
+    handed verifier feedback. It is the demo's canned path. It is **not** a
+    model and a trace it produces is **not** evidence about model behaviour;
+    it is evidence about what the verifier does when handed each rewrite.
+
+``OpenCodeAgent`` (``backend="opencode"``)
+    Shells out to the real ``opencode run`` CLI and needs network. This is the
+    backend that produces a real measurement. Tools-off runs in a scratch
+    directory whose ``opencode.json`` declares no MCP servers, so "no tools"
+    is a property of the environment rather than a promise in a prompt.
+    It raises :class:`AgentUnavailable` rather than inventing a candidate.
+
+Stdlib only.
+"""
+
+from __future__ import annotations
+
+import difflib
+import json
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol, Sequence
+
+from .tasks import DemoTask
+
+__all__ = [
+    "Agent",
+    "AgentUnavailable",
+    "Attempt",
+    "OpenCodeAgent",
+    "ScriptedAgent",
+    "opencode_available",
+    "unified_diff",
+]
+
+
+class AgentUnavailable(RuntimeError):
+    """The backend cannot run here (no binary, no credentials, no network)."""
+
+
+def unified_diff(baseline: str, candidate: str, routine: str) -> str:
+    """Compact unified diff, the form a human reads in the side-by-side."""
+    return "".join(
+        difflib.unified_diff(
+            baseline.splitlines(keepends=True),
+            candidate.splitlines(keepends=True),
+            fromfile=f"{routine} (baseline)",
+            tofile=f"{routine} (candidate)",
+            n=1,
+        )
+    )
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """One proposed rewrite plus the agent's own account of it."""
+
+    n: int
+    candidate_src: str
+    explanation: str
+    diff: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "attempt": self.n,
+            "explanation": self.explanation,
+            "diff": self.diff,
+            "candidate_sha1": _sha1(self.candidate_src),
+        }
+
+
+def _sha1(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
+class Agent(Protocol):
+    """Proposes a candidate, optionally in response to verifier feedback."""
+
+    name: str
+    backend: str
+
+    def propose(
+        self, task: DemoTask, baseline: str, feedback: Sequence[str]
+    ) -> Attempt | None:
+        """Return the next candidate, or None to stop. ``feedback`` is the
+        verifier text the agent has seen so far; empty means tools are off."""
+
+
+class ScriptedAgent:
+    """Offline stand-in. Replays the task's two recorded rewrites."""
+
+    backend = "scripted"
+
+    def __init__(self, name: str = "scripted") -> None:
+        self.name = name
+
+    def propose(
+        self, task: DemoTask, baseline: str, feedback: Sequence[str]
+    ) -> Attempt | None:
+        if not feedback:
+            return Attempt(
+                n=1,
+                candidate_src=task.wrong_candidate(baseline),
+                explanation=task.wrong_rationale,
+                diff=unified_diff(
+                    baseline, task.wrong_candidate(baseline), task.routine
+                ),
+            )
+        if len(feedback) == 1:
+            return Attempt(
+                n=2,
+                candidate_src=task.right_candidate(baseline),
+                explanation=task.right_rationale,
+                diff=unified_diff(
+                    baseline, task.right_candidate(baseline), task.routine
+                ),
+            )
+        return None
+
+
+def opencode_available() -> tuple[bool, str]:
+    """(usable, reason). The binary is the hard requirement.
+
+    Zero configured credentials is *not* treated as fatal: OpenCode 1.18.29
+    ships hosted models under its own ``opencode/`` provider that answer with
+    an empty ``auth.json``. Deciding availability from the credential count
+    would refuse to run in exactly the setup that works. If no model can in
+    fact be reached, ``opencode run`` says so and :meth:`OpenCodeAgent.propose`
+    raises then, with the real reason attached.
+    """
+    binary = shutil.which("opencode")
+    if not binary:
+        return False, "opencode is not on PATH"
+    try:
+        proc = subprocess.run(
+            [binary, "providers", "list"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f"could not run `opencode providers list`: {exc}"
+    text = proc.stdout + proc.stderr
+    if re.search(r"\b0 credentials\b", text):
+        return True, f"opencode at {binary} (no stored credentials; hosted models only)"
+    return True, f"opencode at {binary}"
+
+
+_FENCE = re.compile(r"```(?:mumps|m|M)?\s*\n(.*?)```", re.DOTALL)
+
+_PROMPT_TOOLS_OFF = """\
+You are maintaining MUMPS (M) source from VistA, the US Department of Veterans
+Affairs health system. You have the file only. You cannot run anything.
+
+Routine: {routine}
+Change request: {request}
+
+Current source of {routine}:
+```
+{baseline}```
+
+Reply with the COMPLETE replacement source for {routine} in one fenced code
+block, then one short paragraph explaining why your change is behaviour
+preserving.
+"""
+
+_PROMPT_TOOLS_ON = """\
+You are maintaining MUMPS (M) source from VistA, the US Department of Veterans
+Affairs health system.
+
+You have Rosetta's MCP tools. Use them. In particular `verify_change` runs your
+candidate and the original against the real database and reports the specific
+divergence; treat a divergence as a bug in your change and repair it until
+`verify_change` reports EQUIVALENT.
+
+Routine: {routine}
+Change request: {request}
+
+Current source of {routine}:
+```
+{baseline}```
+
+When you are done, reply with the COMPLETE final source for {routine} in one
+fenced code block, then one short paragraph.
+{feedback}"""
+
+
+class OpenCodeAgent:
+    """Drives the real ``opencode run`` CLI. Needs credentials and network."""
+
+    backend = "opencode"
+
+    def __init__(
+        self,
+        model: str | None = None,
+        *,
+        tools_on: bool = False,
+        cwd: str | None = None,
+        timeout_s: float = 900.0,
+        max_attempts: int = 3,
+    ) -> None:
+        self.name = f"opencode:{model or 'default'}"
+        self.model = model or os.environ.get("ROSETTA_DEMO_MODEL")
+        self.tools_on = tools_on
+        self.cwd = cwd
+        self.timeout_s = timeout_s
+        self.max_attempts = max_attempts
+        self.transcripts: list[str] = []
+        self._isolated: str | None = None
+
+    def _command(self, prompt: str) -> list[str]:
+        binary = shutil.which("opencode")
+        if not binary:
+            raise AgentUnavailable("opencode is not on PATH")
+        cmd = [binary, "run"]
+        if self.model:
+            cmd += ["--model", self.model]
+        cmd.append(prompt)
+        return cmd
+
+    def _workdir(self) -> str:
+        """Where opencode runs, which decides which opencode.json it reads.
+
+        Tools-off has to mean tools-off. OpenCode resolves MCP servers from the
+        project config in its working directory, so the only honest way to
+        withhold them is to run somewhere that does not declare any -- running
+        in the repo with a flag would still leave the server one config reload
+        away from being live.
+        """
+        if self.tools_on:
+            return self.cwd or os.getcwd()
+        if self._isolated is None:
+            self._isolated = tempfile.mkdtemp(prefix="rosetta-tools-off-")
+            Path(self._isolated, "opencode.json").write_text(
+                json.dumps({"$schema": "https://opencode.ai/config.json"}, indent=2),
+                encoding="utf-8",
+            )
+        return self._isolated
+
+    def propose(
+        self, task: DemoTask, baseline: str, feedback: Sequence[str]
+    ) -> Attempt | None:
+        if len(feedback) >= self.max_attempts:
+            return None
+        usable, reason = opencode_available()
+        if not usable:
+            raise AgentUnavailable(reason)
+
+        template = _PROMPT_TOOLS_ON if self.tools_on else _PROMPT_TOOLS_OFF
+        prompt = template.format(
+            routine=task.routine,
+            request=task.request,
+            baseline=baseline if baseline.endswith("\n") else baseline + "\n",
+            feedback=(
+                "\nThe verifier already rejected your previous attempt:\n"
+                + "\n".join(feedback)
+                if feedback
+                else ""
+            ),
+        )
+        try:
+            proc = subprocess.run(
+                self._command(prompt),
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_s,
+                cwd=self._workdir(),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise AgentUnavailable(
+                f"opencode run exceeded {self.timeout_s}s"
+            ) from exc
+        except OSError as exc:
+            raise AgentUnavailable(f"could not run opencode: {exc}") from exc
+
+        output = proc.stdout
+        self.transcripts.append(output + proc.stderr)
+        if proc.returncode != 0 and not output.strip():
+            raise AgentUnavailable(
+                f"opencode run exited {proc.returncode}: {proc.stderr.strip()[:400]}"
+            )
+
+        blocks = _FENCE.findall(output)
+        if not blocks:
+            raise AgentUnavailable(
+                "opencode produced no fenced code block; cannot extract a candidate"
+            )
+        candidate = blocks[-1]
+        if not candidate.endswith("\n"):
+            candidate += "\n"
+        tail = _FENCE.sub("", output).strip()
+        return Attempt(
+            n=len(feedback) + 1,
+            candidate_src=candidate,
+            explanation=tail[-1500:] or "(no prose returned)",
+            diff=unified_diff(baseline, candidate, task.routine),
+        )
