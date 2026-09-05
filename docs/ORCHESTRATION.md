@@ -1,6 +1,14 @@
-# Rosetta orchestration
+# The Rosetta orchestrator (build infrastructure)
 
-Rosetta turns GitHub Issues into isolated local Codex tasks. GitHub is the
+> **This document describes infrastructure, not the project.** The orchestrator is a local
+> service that turns GitHub issues into isolated agent runs so that Rosetta can be built
+> faster. It is temporary and self-destructs on schedule.
+>
+> **Rosetta itself** is a verification system for AI modification of legacy code in
+> languages almost nobody can read — MUMPS, COBOL, JOVIAL, CMS-2. See
+> [PROJECT.md](PROJECT.md). Do not describe the orchestrator as "Rosetta."
+
+The orchestrator turns GitHub Issues into isolated local Codex tasks. GitHub is the
 coordination surface; the actual agents run on the Mac where Codex is signed in.
 
 ## Lifecycle

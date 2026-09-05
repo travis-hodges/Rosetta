@@ -5,6 +5,10 @@ labels:
   - "agent:ready"
   - "agent:researcher"
 body:
+  - type: markdown
+    attributes:
+      value: |
+        **Rosetta** is a verification system for AI modification of legacy code in languages almost nobody can read (MUMPS, COBOL, JOVIAL, CMS-2). It is *not* the GitHub-issue orchestration service in `orchestration/`, which is temporary build infrastructure. Read [docs/PROJECT.md](https://github.com/travis-hodges/Rosetta/blob/main/docs/PROJECT.md) before scoping work.
   - type: textarea
     id: question
     attributes:
