@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rosetta-landing",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "npm run dev -- --port ${PORT:-5173} --strictPort"],
+      "port": 5173,
+      "autoPort": true
+    }
+  ]
+}

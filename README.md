@@ -79,8 +79,8 @@ delete this repository.
 
 ## Landing page
 
-A Vite-powered landing page is in flight in [PR #4](https://github.com/travis-hodges/Rosetta/pull/4)
-and is being built against the specification in `docs/PROJECT.md` §10.
+The repository root holds Rosetta's Vite-powered landing page (`index.html`, `src/`), built
+against the specification in `docs/PROJECT.md` §10.
 
 ```bash
 npm install

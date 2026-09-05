@@ -956,10 +956,10 @@ Zero dependencies means zero chance it breaks at hour 35. Reads `results/summary
 Build from hour 0 in parallel. It has no dependencies and it's the artifact that survives
 the weekend.
 
-> **Current state:** the landing page is in flight in
-> [PR #4](https://github.com/travis-hodges/Rosetta/pull/4). Its first draft marketed the
-> orchestration service rather than this project; it is being rebuilt against this
-> specification before merge.
+> **Current state:** implemented at the repository root (`index.html`, `src/`) as a Vite
+> project rather than a single inline-everything file, because that is what the Vercel
+> deployment expects. The self-contained single-file requirement above still stands for the
+> demo-day artifact and is not yet satisfied.
 
 ---
 
