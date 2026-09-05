@@ -3,4 +3,6 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .rosetta/
-
+node_modules/
+dist/
+.vercel/

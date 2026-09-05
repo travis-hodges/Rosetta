@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Rosetta turns owner-authored GitHub issues into secure, isolated local agent runs and reviewable pull requests."
+    />
+    <meta name="theme-color" content="#070a08" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Rosetta — Turn issues into shipped code" />
+    <meta property="og:description" content="Local-first agent orchestration from GitHub issue to reviewable pull request." />
+    <meta property="og:url" content="https://rosetta-landing.vercel.app/" />
+    <meta property="og:image" content="https://rosetta-landing.vercel.app/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Rosetta — Turn issues into shipped code" />
+    <meta name="twitter:description" content="Local-first agent orchestration from GitHub issue to reviewable pull request." />
+    <meta name="twitter:image" content="https://rosetta-landing.vercel.app/og.png" />
+    <link rel="canonical" href="https://rosetta-landing.vercel.app/" />
+    <title>Rosetta — Turn issues into shipped code</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="wordmark" href="#top" aria-label="Rosetta home">
+        <span class="wordmark-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>ROSETTA</span>
+      </a>
+      <nav id="site-nav" aria-label="Primary navigation">
+        <a href="#workflow">Workflow</a>
+        <a href="#agents">Agents</a>
+        <a href="#security">Security</a>
+        <a href="https://github.com/travis-hodges/Rosetta" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+        <span>Menu</span><i aria-hidden="true"></i>
+      </button>
+      <a class="button button-small" href="#quickstart">Get started <span aria-hidden="true">→</span></a>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-grid" aria-hidden="true"></div>
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> Local-first agent orchestration</p>
+          <h1><span>Rosetta.</span> Turn issues into <em>shipped code.</em></h1>
+          <p class="hero-intro">
+            Rosetta connects GitHub’s task queue to the coding agents already running on your Mac—then returns every result as a pull request you can inspect.
+          </p>
+          <div class="hero-actions">
+            <a class="button" href="https://github.com/travis-hodges/Rosetta" target="_blank" rel="noreferrer">View on GitHub <span aria-hidden="true">↗</span></a>
+            <a class="text-link" href="#workflow">See how it works <span aria-hidden="true">↓</span></a>
+          </div>
+        </div>
+
+        <div class="hero-console" aria-label="Example Rosetta agent run">
+          <div class="console-bar">
+            <span>RUN / ISSUE-042</span>
+            <span class="status"><i></i> AGENT ACTIVE</span>
+          </div>
+          <div class="console-body">
+            <p class="console-muted">$ rosetta poll-once</p>
+            <p><b>01</b> Issue claimed <span>#42</span></p>
+            <p><b>02</b> Worktree created <span>codex/issue-42</span></p>
+            <p><b>03</b> Agent delegated <span>builder</span></p>
+            <div class="console-pulse">
+              <span></span><span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <p><b>04</b> Verification passed <span>24 tests</span></p>
+            <p class="console-success"><b>05</b> Pull request ready <span>→ #108</span></p>
+          </div>
+          <div class="console-footer">
+            <span>LOCAL EXECUTION</span><span>AUDITABLE OUTPUT</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="signal-strip" aria-label="Rosetta workflow overview">
+        <div><b>01</b><span>GitHub issue</span></div>
+        <span class="signal-arrow" aria-hidden="true">→</span>
+        <div><b>02</b><span>Local agent</span></div>
+        <span class="signal-arrow" aria-hidden="true">→</span>
+        <div><b>03</b><span>Reviewable PR</span></div>
+        <p><i></i> The loop stays observable</p>
+      </section>
+
+      <section class="section workflow" id="workflow">
+        <div class="section-heading reveal">
+          <p class="eyebrow"><span></span> The workflow</p>
+          <h2>GitHub is the queue.<br><em>Your Mac is the workforce.</em></h2>
+          <p>Rosetta turns the tools your team already trusts into a durable operating loop—without hiding the work inside another dashboard.</p>
+        </div>
+
+        <div class="workflow-grid">
+          <article class="workflow-card reveal">
+            <div class="workflow-number">01 <span>Signal</span></div>
+            <div class="card-visual signal-visual" aria-hidden="true"><i></i><i></i><i></i></div>
+            <h3>Write the outcome.</h3>
+            <p>Open a GitHub issue with acceptance criteria and apply <code>agent:ready</code>. That issue becomes the source of truth.</p>
+          </article>
+          <article class="workflow-card reveal">
+            <div class="workflow-number">02 <span>Isolate</span></div>
+            <div class="card-visual isolate-visual" aria-hidden="true"><i></i><i></i><i></i></div>
+            <h3>Protect the checkout.</h3>
+            <p>Rosetta verifies the author, claims the work, and creates a dedicated branch and worktree for the run.</p>
+          </article>
+          <article class="workflow-card reveal">
+            <div class="workflow-number">03 <span>Execute</span></div>
+            <div class="card-visual execute-visual" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <h3>Match the right agent.</h3>
+            <p>Builder, researcher, and reviewer profiles give each issue the right operating posture and tool access.</p>
+          </article>
+          <article class="workflow-card reveal">
+            <div class="workflow-number">04 <span>Review</span></div>
+            <div class="card-visual review-visual" aria-hidden="true"><i></i><i></i></div>
+            <h3>Keep humans in control.</h3>
+            <p>Verified changes return through a pull request, with issue comments and history preserved as the durable record.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section agent-section" id="agents">
+        <div class="agent-heading reveal">
+          <p class="eyebrow"><span></span> Purpose-built roles</p>
+          <h2>One queue.<br>Three ways to think.</h2>
+          <p>Select the posture the work requires. Rosetta gives every agent a clear boundary before execution begins.</p>
+          <a class="text-link" href="https://github.com/travis-hodges/Rosetta/tree/main/.github/ISSUE_TEMPLATE" target="_blank" rel="noreferrer">Explore issue templates <span aria-hidden="true">↗</span></a>
+        </div>
+
+        <div class="agent-terminal reveal">
+          <div class="agent-tabs" role="tablist" aria-label="Agent roles">
+            <button type="button" role="tab" aria-selected="true" aria-controls="agent-panel" data-agent="builder">Builder</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="agent-panel" data-agent="researcher">Researcher</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="agent-panel" data-agent="reviewer">Reviewer</button>
+          </div>
+          <div class="agent-panel" id="agent-panel" role="tabpanel" tabindex="0">
+            <div class="agent-meta">
+              <span>PROFILE / <b data-agent-field="profile">BUILDER</b></span>
+              <span><i></i> READY</span>
+            </div>
+            <p class="agent-prompt" data-agent-field="prompt">Implement the requested change, satisfy every acceptance criterion, and verify the complete flow.</p>
+            <dl>
+              <div><dt>Primary mode</dt><dd data-agent-field="mode">Implementation</dd></div>
+              <div><dt>Returns</dt><dd data-agent-field="returns">Tested source changes</dd></div>
+              <div><dt>Best for</dt><dd data-agent-field="best">Features, fixes, refactors</dd></div>
+            </dl>
+            <div class="agent-route" aria-hidden="true">
+              <span>ISSUE</span><i></i><span data-agent-field="route">BUILD</span><i></i><span>PR</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="statement reveal" aria-label="Rosetta value proposition">
+        <p>ISSUE IN.</p>
+        <p><span>PULL REQUEST</span> OUT.</p>
+      </section>
+
+      <section class="section security" id="security">
+        <div class="security-intro reveal">
+          <p class="eyebrow"><span></span> Deliberate by design</p>
+          <h2>Automation that respects the boundary.</h2>
+          <p>Rosetta’s control plane is intentionally small. Agents do the creative work; a deterministic local service owns the lifecycle around it.</p>
+        </div>
+
+        <div class="security-grid">
+          <article class="security-card reveal">
+            <div class="security-icon allow-icon" aria-hidden="true"><span></span><i>✓</i></div>
+            <p class="card-label">01 / AUTHORSHIP</p>
+            <h3>Owner-authorized work only.</h3>
+            <p>The service verifies the issue author before an agent can claim or execute the task.</p>
+          </article>
+          <article class="security-card reveal">
+            <div class="security-icon isolate-icon" aria-hidden="true"><span></span><span></span><span></span></div>
+            <p class="card-label">02 / CONTAINMENT</p>
+            <h3>Every run gets a boundary.</h3>
+            <p>Dedicated worktrees and workspace-scoped execution keep parallel changes isolated and reviewable.</p>
+          </article>
+          <article class="security-card reveal">
+            <div class="security-icon audit-icon" aria-hidden="true"><span></span><i></i><i></i><i></i></div>
+            <p class="card-label">03 / AUDIT</p>
+            <h3>GitHub keeps the receipt.</h3>
+            <p>Issues, pull requests, labels, and comments preserve a record that teammates can inspect later.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section quickstart" id="quickstart">
+        <div class="quickstart-copy reveal">
+          <p class="eyebrow"><span></span> Start the loop</p>
+          <h2>Your next issue can ship itself.</h2>
+          <p>Bring a private GitHub repository, a signed-in Codex CLI, and a Mac that can run the local service.</p>
+          <a class="button" href="https://github.com/travis-hodges/Rosetta#local-setup" target="_blank" rel="noreferrer">Read the setup guide <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="setup-console reveal" aria-label="Rosetta setup commands">
+          <div class="setup-title"><span>QUICKSTART.SH</span><span>3 COMMANDS</span></div>
+          <ol>
+            <li><b>01</b><code>python3 orchestration/orchestrator.py doctor</code></li>
+            <li><b>02</b><code>python3 orchestration/orchestrator.py setup-github</code></li>
+            <li><b>03</b><code>python3 orchestration/orchestrator.py install</code></li>
+          </ol>
+          <div class="setup-ready"><i></i><span>ROSETTA IS LISTENING</span><small>poll interval / 30s</small></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <a class="wordmark" href="#top" aria-label="Rosetta home">
+        <span class="wordmark-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>ROSETTA</span>
+      </a>
+      <p>Local agents. Durable coordination.</p>
+      <div class="footer-links">
+        <a href="https://github.com/travis-hodges/Rosetta" target="_blank" rel="noreferrer">GitHub ↗</a>
+        <a href="https://github.com/travis-hodges/Rosetta/blob/main/docs/ORCHESTRATION.md" target="_blank" rel="noreferrer">Documentation ↗</a>
+      </div>
+      <p class="copyright">© <span id="year"></span> Rosetta. Open-source software.</p>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

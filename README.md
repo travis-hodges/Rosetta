@@ -33,3 +33,15 @@ state three days after installation; it does not delete this repository.
 
 See [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) for the lifecycle, security
 boundary, configuration, and operations.
+
+## Landing page
+
+The repository includes Rosetta's Vite-powered product landing page. To run it
+locally:
+
+```bash
+npm install
+npm run dev
+```
+
+Create the production bundle with `npm run build`.
