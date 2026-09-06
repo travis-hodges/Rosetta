@@ -27,7 +27,7 @@ REPO="travis-hodges/Rosetta"
 # Written by .github/workflows/release.yml at publish time. The sentinel below is
 # what lives in git, so a checkout that has never been released says so plainly
 # instead of guessing at a tag that does not exist.
-PINNED_VERSION="__ROSETTA_VERSION__"
+PINNED_VERSION="0.1.0"
 
 BIN_DIR="${ROSETTA_BIN_DIR:-$HOME/.local/bin}"
 HOME_DIR="${ROSETTA_HOME:-$HOME/.local/share/rosetta}"
