@@ -176,7 +176,7 @@ def edit(
     ``attempt`` and a ``verdict``, and finally exactly one of ``accepted`` or
     ``exhausted``.
     """
-    from rosetta.demo.agents import AgentUnavailable, OpenCodeAgent, unified_diff
+    from rosetta.demo.agents import AgentUnavailable, RosettaAgent, unified_diff
     from rosetta.tools.tools import ToolError, ToolRegistry
 
     reg = registry or ToolRegistry()
@@ -199,7 +199,7 @@ def edit(
         # against the real database, so the default has to allow for a model
         # that is working rather than hung. Measured: a single proposal on a
         # 134-line routine can pass ten minutes.
-        agent = OpenCodeAgent(
+        agent = RosettaAgent(
             model=model, tools_on=True, cwd=str(REPO_ROOT),
             max_attempts=attempts, timeout_s=timeout_s,
         )

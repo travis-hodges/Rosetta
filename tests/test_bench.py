@@ -712,10 +712,10 @@ class TestBenchmarkExecution(unittest.TestCase):
         self.assertIn("no candidate", records[0].harness_error)
 
     def test_model_timeout_is_forwarded_and_errors_persist(self):
-        with tempfile.TemporaryDirectory() as tmp, patch("rosetta.demo.agents.OpenCodeAgent") as cls:
+        with tempfile.TemporaryDirectory() as tmp, patch("rosetta.demo.agents.RosettaAgent") as cls:
             cls.return_value.propose.side_effect = TimeoutError("fixture timeout")
             path = RUN.run_benchmark({"tasks": [self.task()]}, ["baseline", "scaffolded"],
-                                     "opencode", "fixture-model", 1, Path(tmp), model_timeout_s=7)
+                                     "rosetta", "fixture-model", 1, Path(tmp), model_timeout_s=7)
             self.assertEqual(cls.call_args.kwargs["timeout_s"], 7)
             records = T.read_traces(path)
             self.assertEqual(len(records), 2)

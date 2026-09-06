@@ -1,4 +1,4 @@
-"""``rosetta`` -- the OpenCode-derived TUI and one front door for Rosetta.
+"""``rosetta`` -- the Rosetta TUI and one front door for Rosetta.
 
 Before this module there were eleven entry points (``python3 -m
 rosetta.core.selftest``, ``python3 -m rosetta.bench.build``, ``python3 -m
@@ -61,10 +61,20 @@ WORKFLOWS: tuple[tuple[str, str, str], ...] = (
 # Primary TUI
 # --------------------------------------------------------------------------
 
-def _opencode() -> str:
+def _harness() -> str:
+    """Locate the harness executable.
+
+    The binary keeps its upstream filename, as do the ``OPENCODE_*`` variables
+    and the ``.opencode/`` config directory below: the executable reads those
+    exact names, so renaming them would break discovery. Nothing here is shown
+    to a user.
+    """
     binary = shutil.which("opencode")
     if not binary:
-        raise ValueError("OpenCode is not installed. Install OpenCode, then run rosetta again.")
+        raise ValueError(
+            "The Rosetta harness is not installed. "
+            "See docs/BRANDING.md, then run rosetta again."
+        )
     return binary
 
 
@@ -78,7 +88,7 @@ def _command_profiles() -> dict[str, dict[str, object]]:
     for path in sorted((REPO_ROOT / ".opencode" / "command").glob("*.md")):
         text = path.read_text(encoding="utf-8")
         if not text.startswith("---\n") or "\n---\n" not in text[4:]:
-            raise ValueError(f"Invalid OpenCode command profile: {path}")
+            raise ValueError(f"Invalid Rosetta command profile: {path}")
         header, template = text[4:].split("\n---\n", 1)
         entry: dict[str, object] = {
             "template": template.strip().replace("python3 -m rosetta", launcher)
@@ -87,17 +97,17 @@ def _command_profiles() -> dict[str, dict[str, object]]:
             if not line.strip():
                 continue
             if ":" not in line:
-                raise ValueError(f"Invalid OpenCode command metadata in {path}: {line}")
+                raise ValueError(f"Invalid Rosetta command metadata in {path}: {line}")
             key, value = (part.strip() for part in line.split(":", 1))
             if key not in {"description", "agent", "subtask"}:
-                raise ValueError(f"Unsupported OpenCode command field {key!r} in {path}")
+                raise ValueError(f"Unsupported Rosetta command field {key!r} in {path}")
             entry[key] = value.lower() == "true" if key == "subtask" else value
         commands[path.stem] = entry
     return commands
 
 
 def _config() -> dict[str, Any]:
-    """Build a portable OpenCode config without writing into the target project."""
+    """Build a portable harness config without writing into the target project."""
     path = REPO_ROOT / "opencode.json"
     if not path.is_file():
         raise ValueError(
@@ -184,7 +194,7 @@ def _merge_user_config(config: dict[str, Any], raw: str) -> dict[str, Any]:
 
 
 def cmd_tui(args: argparse.Namespace) -> int:
-    """Open the branded OpenCode TUI with every Rosetta workflow attached."""
+    """Open the Rosetta TUI with every Rosetta workflow attached."""
     try:
         project = args.project.expanduser().resolve()
         if not project.is_dir():
@@ -207,7 +217,7 @@ def cmd_tui(args: argparse.Namespace) -> int:
             )
         # This is a default, not a lock: an operator can deliberately supply a
         # different TUI config, and a target project's config still has the
-        # final say in OpenCode's normal precedence order.
+        # final say in the harness's normal precedence order.
         env.setdefault("OPENCODE_TUI_CONFIG", str(tui_config))
         corpus = args.corpus.expanduser().resolve() if args.corpus else Path(
             env.get("ROSETTA_CORPUS_DIR", project)
@@ -224,7 +234,7 @@ def cmd_tui(args: argparse.Namespace) -> int:
         mcp_env["ROSETTA_PROJECT_DIR"] = str(project)
         env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
 
-        command = [_opencode()]
+        command = [_harness()]
         if args.prompt is None:
             command.append(str(project))
         else:
@@ -244,7 +254,7 @@ def cmd_tui(args: argparse.Namespace) -> int:
                 timeout=(args.timeout or 300.0) if args.prompt is not None else None,
             ).returncode
         except subprocess.TimeoutExpired:
-            print("ERROR: OpenCode prompt exceeded its time limit.", file=sys.stderr)
+            print("ERROR: Rosetta prompt exceeded its time limit.", file=sys.stderr)
             return 124
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -405,8 +415,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     else:
         print(_meh("nothing published — `rosetta bench report` writes summary.json"))
 
-    print(_yes("opencode on PATH") if shutil.which("opencode")
-          else _no("opencode not on PATH — needed to drive any model"))
+    print(_yes("Rosetta harness on PATH") if shutil.which("opencode")
+          else _no("Rosetta harness not on PATH — needed to drive any model"))
 
     _next("rosetta               # open the editor TUI in this project",
           "rosetta change -m '...' --set REF VALUE",
@@ -436,12 +446,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     _head("model access")
     try:
-        from rosetta.demo.agents import opencode_available
+        from rosetta.demo.agents import rosetta_agent_available
 
-        usable, reason = opencode_available()
+        usable, reason = rosetta_agent_available()
         print(_yes(reason) if usable else _no(reason))
     except Exception as exc:
-        print(_no(f"could not query opencode: {exc}"))
+        print(_no(f"could not query the Rosetta harness: {exc}"))
 
     _head("data")
     split = _split_summary()
@@ -471,7 +481,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
     model = model_registry.resolve(args.model)
     print(f"routine   {routine}")
     print(f"request   {args.request}")
-    print(f"model     {model or 'opencode default'}")
+    print(f"model     {model or 'harness default'}")
     print(f"attempts  up to {args.attempts}, {args.timeout:.0f}s each")
 
     accepted: dict[str, Any] | None = None
@@ -795,10 +805,10 @@ def cmd_model(args: argparse.Namespace) -> int:
         entries = model_registry.load()
         if not entries:
             print("No models registered.")
-            print("\nRosetta does not host models. Register the id OpenCode uses:")
+            print("\nRosetta does not host models. Register the id your provider uses:")
             print("  rosetta model add opus     anthropic/claude-opus-5")
             print("  rosetta model add local    ollama/qwen2.5-coder:32b")
-            _next("opencode models              # what your install can reach")
+            _next("rosetta models              # what your install can reach")
             return 0
         width = max(len(m.name) for m in entries)
         for m in entries:
@@ -828,18 +838,18 @@ def cmd_model(args: argparse.Namespace) -> int:
         return 0
 
     if args.model_cmd == "test":
-        from rosetta.demo.agents import AgentUnavailable, OpenCodeAgent
+        from rosetta.demo.agents import AgentUnavailable, RosettaAgent
 
         model = model_registry.resolve(args.name)
-        print(f"asking {model or 'the opencode default'} for one MUMPS rewrite...")
-        agent = OpenCodeAgent(model=model, tools_on=False, cwd=str(REPO_ROOT),
-                              max_attempts=1, timeout_s=args.timeout)
+        print(f"asking {model or 'the harness default'} for one MUMPS rewrite...")
+        agent = RosettaAgent(model=model, tools_on=False, cwd=str(REPO_ROOT),
+                             max_attempts=1, timeout_s=args.timeout)
         task = _EditTask("XLFSTR", "Return the string unchanged. Change nothing else.")
         try:
             attempt = agent.propose(task, "XLFSTR ;\n QUIT\n", [])
         except AgentUnavailable as exc:
             return _fail(f"{model or 'default'} is not usable: {exc}",
-                         "opencode auth login    # if this is a credentials problem")
+                         "rosetta auth login     # if this is a credentials problem")
         if attempt is None:
             return _fail(f"{model or 'default'} returned nothing")
         print(_yes(f"{model or 'default'} answered with a parseable candidate "
@@ -962,9 +972,9 @@ def cmd_selftest(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 def cmd_models(args: argparse.Namespace) -> int:
-    """Expose OpenCode's model catalogue without hiding its exit status."""
+    """Expose the harness model catalogue without hiding its exit status."""
     try:
-        command = [_opencode(), "models"]
+        command = [_harness(), "models"]
         if args.provider:
             command.append(args.provider)
         return subprocess.run(command).returncode
@@ -1234,7 +1244,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("selftest", help="prove the verifier works on this machine")
     _remainder(p, "rosetta.core.selftest")
 
-    p = sub.add_parser("models", help="list models available through OpenCode")
+    p = sub.add_parser("models", help="list models available through Rosetta")
     p.add_argument("provider", nargs="?")
 
     p = sub.add_parser("eval", help="compare baseline and candidate source with a case suite")

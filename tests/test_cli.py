@@ -247,7 +247,7 @@ class PublishedSurfaceTests(unittest.TestCase):
 
     def _invocations(self, text: str) -> set[str]:
         """Commands the page actually offers: copy-button payloads and <code>
-        contents. Prose like "Rosetta pairs OpenCode" is not an invocation.
+        contents. Prose like "Rosetta pairs a harness" is not an invocation.
         """
         import re
 

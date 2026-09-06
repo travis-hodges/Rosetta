@@ -1,9 +1,9 @@
 """Transparent stdio tap for an MCP server. Evidence, not plumbing.
 
 Run an MCP server as a child process and relay stdin/stdout byte-for-byte
-while appending every frame to a JSONL log. Point an MCP host (OpenCode) at
+while appending every frame to a JSONL log. Point an MCP host (the Rosetta TUI) at
 the tap instead of the server and the log is a verbatim record of what the
-host actually asked for -- which is the only honest way to claim "OpenCode
+host actually asked for -- which is the only honest way to claim "Rosetta
 discovered our tools".
 
     python3 -m rosetta.demo.mcp_tap --log /tmp/t.jsonl -- python3 -m rosetta.tools

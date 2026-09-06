@@ -10,12 +10,16 @@ record carries the backend name.
     model and a trace it produces is **not** evidence about model behaviour;
     it is evidence about what the verifier does when handed each rewrite.
 
-``OpenCodeAgent`` (``backend="opencode"``)
-    Shells out to the real ``opencode run`` CLI and needs network. This is the
+``RosettaAgent`` (``backend="rosetta"``)
+    Shells out to the real Rosetta harness CLI and needs network. This is the
     backend that produces a real measurement. Tools-off runs in a scratch
-    directory whose ``opencode.json`` declares no MCP servers, so "no tools"
+    directory whose harness config declares no MCP servers, so "no tools"
     is a property of the environment rather than a promise in a prompt.
     It raises :class:`AgentUnavailable` rather than inventing a candidate.
+
+The harness executable, its ``OPENCODE_*`` environment keys and its config
+filename keep their upstream names: the binary reads them, so renaming them
+would break discovery. Nothing a user reads says anything but Rosetta.
 
 Stdlib only.
 """
@@ -39,9 +43,9 @@ __all__ = [
     "Agent",
     "AgentUnavailable",
     "Attempt",
-    "OpenCodeAgent",
+    "RosettaAgent",
     "ScriptedAgent",
-    "opencode_available",
+    "rosetta_agent_available",
     "unified_diff",
 ]
 
@@ -132,19 +136,19 @@ class ScriptedAgent:
         return None
 
 
-def opencode_available() -> tuple[bool, str]:
+def rosetta_agent_available() -> tuple[bool, str]:
     """(usable, reason). The binary is the hard requirement.
 
-    Zero configured credentials is *not* treated as fatal: OpenCode 1.18.29
-    ships hosted models under its own ``opencode/`` provider that answer with
-    an empty ``auth.json``. Deciding availability from the credential count
-    would refuse to run in exactly the setup that works. If no model can in
-    fact be reached, ``opencode run`` says so and :meth:`OpenCodeAgent.propose`
-    raises then, with the real reason attached.
+    Zero configured credentials is *not* treated as fatal: the harness ships
+    hosted models under a built-in provider that answer with an empty
+    ``auth.json``. Deciding availability from the credential count would refuse
+    to run in exactly the setup that works. If no model can in fact be reached,
+    the harness says so and :meth:`RosettaAgent.propose` raises then, with the
+    real reason attached.
     """
     binary = shutil.which("opencode")
     if not binary:
-        return False, "opencode is not on PATH"
+        return False, "the Rosetta harness binary is not on PATH"
     try:
         proc = subprocess.run(
             [binary, "--version"],
@@ -153,13 +157,13 @@ def opencode_available() -> tuple[bool, str]:
             timeout=60,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"could not run `opencode --version`: {exc}"
+        return False, f"could not query the Rosetta harness version: {exc}"
     if proc.returncode != 0:
-        return False, f"opencode --version exited {proc.returncode}"
+        return False, f"the Rosetta harness version check exited {proc.returncode}"
     text = proc.stdout + proc.stderr
     if re.search(r"\b0 credentials\b", text):
-        return True, f"opencode at {binary} (no stored credentials; hosted models only)"
-    return True, f"opencode at {binary}"
+        return True, f"Rosetta harness at {binary} (no stored credentials; hosted models only)"
+    return True, f"Rosetta harness at {binary}"
 
 
 _FENCE = re.compile(r"```(?:mumps|m|M)?\s*\n(.*?)```", re.DOTALL)
@@ -201,10 +205,10 @@ fenced code block, then one short paragraph.
 {feedback}"""
 
 
-class OpenCodeAgent:
-    """Drives the real ``opencode run`` CLI. Needs credentials and network."""
+class RosettaAgent:
+    """Drives the real Rosetta harness CLI. Needs credentials and network."""
 
-    backend = "opencode"
+    backend = "rosetta"
 
     def __init__(
         self,
@@ -216,7 +220,7 @@ class OpenCodeAgent:
         max_attempts: int = 3,
         isolated: bool = False,
     ) -> None:
-        self.name = f"opencode:{model or 'default'}"
+        self.name = f"rosetta:{model or 'default'}"
         self.model = model or os.environ.get("ROSETTA_DEMO_MODEL")
         self.tools_on = tools_on
         self.cwd = cwd
@@ -229,7 +233,7 @@ class OpenCodeAgent:
     def _command(self, prompt: str) -> list[str]:
         binary = shutil.which("opencode")
         if not binary:
-            raise AgentUnavailable("opencode is not on PATH")
+            raise AgentUnavailable("the Rosetta harness binary is not on PATH")
         cmd = [binary, "run", "--format", "json"]
         if self.isolated or not self.tools_on:
             cmd += ["--agent", "rosetta-eval", "--pure", "--dir", self._workdir()]
@@ -239,10 +243,10 @@ class OpenCodeAgent:
         return cmd
 
     def _workdir(self) -> str:
-        """Where opencode runs, which decides which opencode.json it reads.
+        """Where the harness runs, which decides which config it reads.
 
-        Tools-off has to mean tools-off. OpenCode resolves MCP servers from the
-        project config in its working directory, so the only honest way to
+        Tools-off has to mean tools-off. The harness resolves MCP servers from
+        the project config in its working directory, so the only honest way to
         withhold them is to run somewhere that does not declare any -- running
         in the repo with a flag would still leave the server one config reload
         away from being live.
@@ -295,7 +299,7 @@ class OpenCodeAgent:
     ) -> Attempt | None:
         if len(feedback) >= self.max_attempts:
             return None
-        usable, reason = opencode_available()
+        usable, reason = rosetta_agent_available()
         if not usable:
             raise AgentUnavailable(reason)
 
@@ -326,16 +330,16 @@ class OpenCodeAgent:
             )
         except subprocess.TimeoutExpired as exc:
             raise AgentUnavailable(
-                f"opencode run exceeded {self.timeout_s}s"
+                f"the Rosetta harness run exceeded {self.timeout_s}s"
             ) from exc
         except OSError as exc:
-            raise AgentUnavailable(f"could not run opencode: {exc}") from exc
+            raise AgentUnavailable(f"could not run the Rosetta harness: {exc}") from exc
 
         output = proc.stdout
         self.transcripts.append(output + proc.stderr)
         if proc.returncode != 0:
             raise AgentUnavailable(
-                f"opencode run exited {proc.returncode}: {proc.stderr.strip()[:400]}"
+                f"the Rosetta harness exited {proc.returncode}: {proc.stderr.strip()[:400]}"
             )
 
         # JSON events keep terminal banners and tool output out of candidates.
@@ -346,14 +350,14 @@ class OpenCodeAgent:
             except json.JSONDecodeError:
                 continue
             if event.get("type") == "error":
-                raise AgentUnavailable(f"OpenCode reported an error: {str(event.get('error'))[:400]}")
+                raise AgentUnavailable(f"the Rosetta harness reported an error: {str(event.get('error'))[:400]}")
             if event.get("type") == "text":
                 text_parts.append(event.get("part", {}).get("text", ""))
         output = "\n".join(text_parts)
         blocks = _FENCE.findall(output)
         if not blocks:
             raise AgentUnavailable(
-                "opencode produced no fenced code block; cannot extract a candidate"
+                "the model produced no fenced code block; cannot extract a candidate"
             )
         candidate = blocks[-1]
         if not candidate.endswith("\n"):

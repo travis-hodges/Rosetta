@@ -1,5 +1,12 @@
 # Branding the harness as Rosetta
 
+> This is the one file in the repository that names the upstream project Rosetta
+> adopts. Everywhere else the product says **Rosetta**; the only upstream strings
+> that survive elsewhere are literal addresses the binary itself reads — its
+> filename on PATH, the `OPENCODE_*` environment keys, `opencode.json`,
+> `.opencode/`, the `opencode.ai` schema URLs, and the `opencode` provider id.
+> Those are not branding, and renaming them breaks the tool.
+
 Rosetta adopts OpenCode whole as the agent harness — [`docs/PROJECT.md` §5](PROJECT.md)
 rejects forking it, and nothing here forks it. What this does is rewrite the user-visible
 branding inside the already-installed binary and add a source-aware `rosetta`
@@ -34,7 +41,7 @@ Commands:
 |---|---|
 | Command name | `rosetta` on PATH (source-aware launcher in `~/.local/bin`, or beside `opencode`) |
 | Usage output | yargs script name, every command and positional description |
-| Wordmark | new `r s t a` glyphs drawn in OpenCode's own 4×3 block font — plain, single-color, and the two-glyph monogram |
+| Wordmark | new `r s t a` glyphs drawn in the upstream 4×3 block font — plain, single-color, and the two-glyph monogram |
 | TUI home screen | one-color Rosetta wordmark instead of a dim `ro` / bright `setta` split |
 | MUMPS-first prompt | `MUMPS change…` with routine, global, and verification examples |
 | TUI palette | Rosetta charcoal, cream, and lemon theme; stacked diffs; blinking block cursor |
@@ -49,7 +56,7 @@ Commands:
 `opencode` still works and shows the same branding: it is the same binary, and Homebrew
 and npm need that name to stay.
 
-The command intentionally does not point straight at the OpenCode executable.
+The command intentionally does not point straight at the harness executable.
 It enters through Rosetta's Python launcher, which selects the current project
 as the default corpus and injects the Rosetta MCP server, agents, instructions
 and command palette. The branding script migrates the older direct symlink.
@@ -107,12 +114,12 @@ Around that:
 - macOS gets a fresh ad-hoc signature (`codesign --force --sign -`); a modified Mach-O is
   killed on arm64 without one
 - the result is smoke-tested with `--version`, and **auto-reverted** if it fails to run
-- all wordmark shape and foreground patches are marked required: if a future OpenCode build changes them,
+- all wordmark shape and foreground patches are marked required: if a future upstream build changes them,
   the script aborts before writing anything rather than half-patching
 
 ## After an upgrade
 
 `brew upgrade opencode` or `npm i -g opencode-ai@latest` replaces the binary and drops
 every patch. `scripts/rosetta-brand.py --check` reports `branding not applied` or
-`branding stale`; re-run the script. If OpenCode has moved the strings by then, the run
+`branding stale`; re-run the script. If the upstream build has moved the strings by then, the run
 aborts untouched and the patch table in the script needs updating.

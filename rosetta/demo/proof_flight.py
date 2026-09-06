@@ -1,4 +1,4 @@
-"""A short, genuinely live proof flight for the OpenCode TUI.
+"""A short, genuinely live proof flight for the Rosetta TUI.
 
 The longer side-by-side demo tells the full AJETIU2 story.  This flight exists
 for the interactive ``/demo`` command: it executes one real VistA MUMPS routine

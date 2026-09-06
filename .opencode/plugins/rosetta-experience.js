@@ -1,4 +1,4 @@
-// OpenCode's `tool()` helper is intentionally an identity function. Keeping the
+// The harness `tool()` helper is intentionally an identity function. Keeping the
 // tiny equivalent here makes the shipped TUI plugin cold-start offline without
 // a nested npm install.
 const tool = (definition) => definition
@@ -72,7 +72,7 @@ export const RosettaExperience = async ({ client }) => {
       await client.tui.showToast({ body: { title: `Rosetta · ${title}`, message, variant, duration } })
       return true
     } catch {
-      // Headless `opencode run` has no TUI endpoint. The proof itself must continue.
+      // A headless run has no TUI endpoint. The proof itself must continue.
       return false
     }
   }

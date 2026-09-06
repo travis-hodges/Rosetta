@@ -10,7 +10,7 @@ controlled code-and-state change through **REQUEST → DISCOVER → CONTRACT →
 EDIT → EVALUATE → SHIP**. For the hackathon, that loop is explicitly optimized
 for VA VistA MUMPS under YottaDB.
 
-The product surface is the OpenCode-derived TUI, backed by local runtime and
+The product surface is the Rosetta TUI, backed by local runtime and
 CLI primitives. A user starts with an outcome such as “add this
 facility,” not a routine name. Rosetta discovers affected routines and FileMan
 data, defines the expected state delta and preserved invariants, edits code,
@@ -130,7 +130,7 @@ understood the routine retired.
 | **Verifier** | YottaDB differential execution — diff output **and** global state |
 | **Mutation generator** | Manufactures benchmark tasks and training data from working code |
 | **Benchmark** | 200+ auto-generated tasks, held-out split, mechanical scoring |
-| **MCP tool server** | Exposes Rosetta to OpenCode or any host agent |
+| **MCP tool server** | Exposes Rosetta to the TUI or any host agent |
 | **Fine-tune** | Comprehension labels from static analysis → SFT; RFT grader wrapper |
 | **Demo** | Side-by-side: agent without verifier vs. with |
 | **Website** | Single self-contained HTML, real numbers, install instructions |
@@ -478,8 +478,9 @@ ground truth. These are rungs 3–4, not rung 1.
 unfalsifiable in a demo — "how do you know the output is correct?" has no good answer
 without a verifier, which is the actual product.
 
-**Forking OpenCode.** Learning a large unfamiliar agent codebase burns ~8 hours and
-produces nothing differentiated. Extend via MCP instead. OpenCode is a working harness;
+**Forking the agent harness.** Learning a large unfamiliar agent codebase burns ~8
+hours and produces nothing differentiated. Extend via MCP instead. The adopted
+harness works;
 adopt it whole.
 
 **Model-first / fine-tuning first.** Hits a wall twice: no data, and no proof. The verifier
@@ -522,7 +523,7 @@ announcing it.**
 
 ```
                     ┌─────────────────────────┐
-                    │   OpenCode (harness)    │  ← not ours, adopted whole
+                    │   Agent harness         │  ← not ours, adopted whole
                     └───────────┬─────────────┘
                                 │ MCP
                     ┌───────────▼─────────────┐
@@ -944,7 +945,7 @@ contract first.
 | 2–6 | `execute()` drives a real routine. `verify_equivalence()` diffs outputs **and** globals. Routine selector ranks candidates. | A, B, C, E, F |
 | 6–10 | 200+ mutation tasks generated, equivalent mutants discarded, **split lock written**. Baseline run, tools off. | B, D |
 | **10–12** | 🚨 **CHECKPOINT — MEASURE AND CHOOSE THE NARRATIVE** | all |
-| 12–20 | MCP tools live in OpenCode. Repair loop working. Re-score with tools on. | C, D, G |
+| 12–20 | MCP tools live in the TUI. Repair loop working. Re-score with tools on. | C, D, G |
 | 20–28 | Comprehension labels extracted, SFT submitted and returned, third bar scored. RFT grader wrapper written. | F, D |
 | 28–32 | 3–5 hand-authored *real* tasks for the demo. Side-by-side locked. Website wired to real results. | G, E |
 | 32–36 | **Rehearse. Freeze code. Rehearse again.** | all |
@@ -977,7 +978,7 @@ before the number arrives, and do not fall in love with the first framing.
 - **A** — `python -m rosetta.core.selftest` snapshots, mutates a known routine, detects the
   divergence with a specific global ref, restores clean. Under 5s.
 - **B** — 200+ killable tasks across ≥6 operator classes, equivalent mutants discarded.
-- **C** — OpenCode calls all 8 tools. `verify_change` returns actionable divergences.
+- **C** — the TUI calls all 8 tools. `verify_change` returns actionable divergences.
 - **D** — `report.py` emits three-bar chart + per-operator table. Split lock respected.
 - **E** — Single HTML file, opens offline, real numbers, side-by-side GIF embedded.
 - **F** — SFT JSONL from deterministic labels. Fine-tune returns a usable model ID. RFT
@@ -1140,7 +1141,7 @@ Zero dependencies means zero chance it breaks at hour 35. Reads `results/summary
    and global state.
 5. **Benchmark results** — live table from `results/`. Three bars, per-operator breakdown.
    State the mutation-proxy limitation openly.
-6. **Install** — `docker run` + `pip install` + OpenCode config snippet, with copy buttons.
+6. **Install** — `docker run` + `pip install` + harness config snippet, with copy buttons.
 7. **Deployment** — air-gapped by construction, MCP-portable, inherited ATO (Game Warden /
    Platform One), the ladder: public VistA → CUI COBOL → ITAR Ada/JOVIAL → classified CMS-2.
 8. **Footer** — team, GitHub, DNHacks.

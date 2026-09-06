@@ -3,7 +3,7 @@
 Eight tools over MUMPS/VistA source and the verifier, exposed as plain
 JSON-RPC 2.0 over stdio with no third-party MCP SDK, so the demo runs offline
 from a cold start. See :mod:`rosetta.tools.server` for the transport and a
-ready-to-paste OpenCode configuration snippet.
+ready-to-paste harness configuration snippet.
 
 Start it with::
 

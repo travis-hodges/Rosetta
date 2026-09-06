@@ -73,7 +73,7 @@ case validation, browser palette, website commands, and release artifact are cov
 the normal test discovery gate. The tag workflow no longer carries a known-broken list:
 it runs the same complete Python suite as CI, then the web, pitch, and TUI tests.
 
-The release bundle is also inspected directly to prove that `opencode.json`, the
+The release bundle is also inspected directly to prove that the harness config, the
 agent/command profiles, the presentation preset, and the experience plugin ship without
 `node_modules`. This prevents a downloadable build from passing the offline demo while
 silently omitting the primary TUI.

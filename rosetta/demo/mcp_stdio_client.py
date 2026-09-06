@@ -1,6 +1,6 @@
 """Minimal MCP-over-stdio client. Stdlib only.
 
-The demo harness reaches Rosetta's tools the same way OpenCode does -- by
+The demo harness reaches Rosetta's tools the same way the TUI does -- by
 speaking MCP to a subprocess -- rather than by importing `rosetta.tools`.
 That protocol boundary is the point of the architecture (docs/PROJECT.md #6:
 "works with any host agent"), so the harness must not shortcut it.

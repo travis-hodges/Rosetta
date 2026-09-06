@@ -175,7 +175,7 @@ rosetta model test local           # one live call: reachable and parseable
 rosetta model list
 ```
 
-Rosetta does not host models and holds no credentials — OpenCode owns those,
+Rosetta does not host models and holds no credentials — the harness owns those,
 which keeps secrets out of the repository and out of every trace. Registering
 a model means telling Rosetta which id to pass and under what name you want to
 see it in a report.

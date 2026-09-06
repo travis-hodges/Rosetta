@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """MOCK Rosetta MCP server -- stdio JSON-RPC. NOT the real tool server.
 
-This exists for ONE reason: to prove that OpenCode can discover and call a
+This exists for ONE reason: to prove that the Rosetta TUI can discover and call a
 Rosetta stdio MCP server before Stream C's real server at `rosetta/tools/`
 is ready. Every tool here is a stub. Every tool description is prefixed
-"[MOCK]" so that a tool listing in OpenCode is unmistakably the mock.
+"[MOCK]" so that a tool listing in the TUI is unmistakably the mock.
 
-When `rosetta/tools/` lands, point the OpenCode config at it instead --
-see scripts/opencode-setup.sh, which takes the server module as an argument.
+When `rosetta/tools/` lands, point the harness config at it instead --
+see scripts/harness-setup.sh, which takes the server module as an argument.
 Nothing else in the wiring changes.
 
 Protocol: MCP over stdio, newline-delimited JSON-RPC 2.0 on stdin/stdout.
@@ -30,7 +30,7 @@ SERVER_VERSION = "0.0.1-mock"
 
 # Set ROSETTA_MOCK_MCP_TRANSCRIPT=<path> to append every frame this server
 # sees and sends, one JSON object per line. This is how we prove what a host
-# like OpenCode actually asked for, rather than asserting it.
+# like the host actually asked for, rather than asserting it.
 TRANSCRIPT_PATH = os.environ.get("ROSETTA_MOCK_MCP_TRANSCRIPT")
 
 

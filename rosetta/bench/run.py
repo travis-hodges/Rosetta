@@ -57,7 +57,7 @@ class RunRefused(RuntimeError):
 class _TaskShim:
     """Minimal stand-in for demo.tasks.DemoTask.
 
-    OpenCodeAgent reads only `routine` and `request`; the demo's replay fields
+    RosettaAgent reads only `routine` and `request`; the demo's replay fields
     (wrong_edit/right_edit) are meaningless for a benchmark task and are
     deliberately absent rather than faked.
     """
@@ -218,7 +218,7 @@ def run_benchmark(
     model_timeout_s: float = 120.0,
 ) -> Path:
     from rosetta.core import verify_equivalence
-    from rosetta.demo.agents import OpenCodeAgent
+    from rosetta.demo.agents import RosettaAgent
 
     tasks = taskset["tasks"][:limit] if limit else taskset["tasks"]
     if not conditions or any(condition not in CONDITIONS for condition in conditions):
@@ -239,10 +239,10 @@ def run_benchmark(
 
     for condition in conditions:
         tools_on = CONDITIONS[condition]
-        if backend == "opencode":
-            agent = OpenCodeAgent(model=model, tools_on=tools_on,
-                                  max_attempts=max_attempts, isolated=True,
-                                  timeout_s=model_timeout_s)
+        if backend == "rosetta":
+            agent = RosettaAgent(model=model, tools_on=tools_on,
+                                 max_attempts=max_attempts, isolated=True,
+                                 timeout_s=model_timeout_s)
         else:
             # ScriptedAgent replays a demo task's two recorded rewrites. A
             # benchmark task has no recorded rewrites, so it would produce a
@@ -250,7 +250,7 @@ def run_benchmark(
             # happened and scores nothing. Refuse instead.
             raise RunRefused(
                 "the scripted backend replays recorded demo edits and cannot "
-                "answer arbitrary benchmark tasks; use --backend opencode"
+                "answer arbitrary benchmark tasks; use --backend rosetta"
             )
         try:
             for i, task in enumerate(tasks, start=1):
@@ -269,7 +269,7 @@ def run_benchmark(
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--taskset", type=Path, default=DEFAULT_TASKSET)
-    ap.add_argument("--backend", choices=["scripted", "opencode"], default="opencode")
+    ap.add_argument("--backend", choices=["scripted", "rosetta"], default="rosetta")
     ap.add_argument("--model", default=os.environ.get("ROSETTA_MODEL"))
     ap.add_argument("--conditions", default="baseline,scaffolded")
     ap.add_argument("--attempts", type=int, default=3)

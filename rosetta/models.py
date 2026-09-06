@@ -1,7 +1,7 @@
 """The model registry: names you choose, mapped to models Rosetta can drive.
 
-Rosetta never hosts a model. Every command that needs one shells out to
-``opencode run --model <id>``, so "bringing your own model" means telling
+Rosetta never hosts a model. Every command that needs one shells out to the
+Rosetta harness with ``--model <id>``, so "bringing your own model" means telling
 Rosetta which id to pass and under what name you want to see it in a report.
 That is the whole abstraction, and it is deliberately thin: a registry that
 did more would be a second place for a model id to be wrong.
@@ -15,7 +15,7 @@ accepted -- :func:`resolve` passes an unknown value through untouched, so an
 air-gapped operator who has not registered anything is never blocked by this
 file.
 
-The registry holds no credentials. OpenCode owns those, which keeps secrets
+The registry holds no credentials. The harness owns those, which keeps secrets
 out of the repository and out of every trace Rosetta writes.
 """
 
@@ -54,7 +54,7 @@ class RegistryError(RuntimeError):
 class Model:
     """One model Rosetta can be pointed at.
 
-    ``name`` is yours and appears in reports. ``model`` is the id OpenCode
+    ``name`` is yours and appears in reports. ``model`` is the id the harness
     understands, in ``provider/model`` form.
     """
 
@@ -126,7 +126,7 @@ def add(
         )
     if "/" not in model:
         raise RegistryError(
-            f"{model!r} does not look like an OpenCode model id; expected "
+            f"{model!r} does not look like a model id; expected "
             "'provider/model', for example 'anthropic/claude-opus-5' or "
             "'ollama/qwen2.5-coder:32b'"
         )

@@ -41,7 +41,7 @@ These govern work on Rosetta itself. Full reasoning in `docs/PROJECT.md` §11.
 8. **Do not mock YottaDB in core tests.** Mocked verification proves nothing.
 9. **Do not re-propose a rejected approach** (`docs/PROJECT.md` §5) without new
    information: COBOL-first, JOVIAL/CMS-2 as the proving ground, translation as the
-   product, forking OpenCode, or model-first/fine-tune-first.
+   product, forking the agent harness, or model-first/fine-tune-first.
 
 ---
 

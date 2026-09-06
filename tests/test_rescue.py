@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from rosetta import cli
-from rosetta.demo.agents import OpenCodeAgent
+from rosetta.demo.agents import RosettaAgent
 from rosetta.tools import fileman, sources
 from rosetta.tools.cases import SuiteStore, TaskStore
 
@@ -62,7 +62,7 @@ class TerminalTests(unittest.TestCase):
 
     def test_launch_forwards_custom_model_and_corpus(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch.object(cli, "_opencode", return_value="opencode"), patch.object(cli.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            with patch.object(cli, "_harness", return_value="opencode"), patch.object(cli.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
                 self.assertEqual(cli.main(["code", directory, "--model", "local/specialist", "--corpus", directory, "--prompt", "Explain LOCAL"]), 0)
                 command = run.call_args.args[0]
                 self.assertIn("local/specialist", command)
@@ -73,7 +73,7 @@ class TerminalTests(unittest.TestCase):
 
     def test_bare_launch_uses_project_as_workspace_and_default_corpus(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch.object(cli, "_opencode", return_value="opencode"), patch.object(
+            with patch.object(cli, "_harness", return_value="opencode"), patch.object(
                 cli.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)
             ) as run, patch.object(Path, "cwd", return_value=Path(directory)):
                 self.assertEqual(cli.main([]), 0)
@@ -90,7 +90,7 @@ class TerminalTests(unittest.TestCase):
             self.assertIn("verify", config["command"])
 
     def test_benchmark_environment_disables_inherited_tools(self):
-        agent = OpenCodeAgent(isolated=True, tools_on=True)
+        agent = RosettaAgent(isolated=True, tools_on=True)
         try:
             with patch.dict(os.environ, {"OPENCODE_CONFIG_CONTENT": json.dumps({"tools": {"read": True}, "provider": {"local": {}}})}):
                 config = json.loads(agent._environment()["OPENCODE_CONFIG_CONTENT"])

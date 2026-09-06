@@ -187,7 +187,8 @@ test('the stakes and product answer are explicit', () => {
 
 test('the landing page shows the product surface and official installer', () => {
   assert.match(html, /Rosetta terminal UI/);
-  assert.match(html, /OPENCODE-DERIVED TUI/);
+  assert.match(html, /ROSETTA TUI/);
+  assert.doesNotMatch(html, /OpenCode/i);
   assert.match(html, /RECORDED AUDIT TRACE/);
   assert.doesNotMatch(html, /ACTUAL PRODUCT UI|product-window|product-stage/);
   assert.match(html, /EXECUTION HARNESS/);

@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
-# Register Rosetta's MCP tool server with OpenCode. Idempotent.
+# Register Rosetta's MCP tool server with the Rosetta harness. Idempotent.
 #
-# Verified against OpenCode 1.18.29 (npm package `opencode-ai`), MCP protocol
-# 2025-11-25. That version reads `opencode.json` from the project root and takes
+# Verified against harness build 1.18.29, MCP protocol
+# 2025-11-25. That version reads the harness config from the project root and takes
 # a local stdio server as:
 #
 #   "mcp": { "<name>": { "type": "local", "command": [...],
 #                        "enabled": true, "environment": {...} } }
 #
 # `command` is a single argv array (executable first) -- not the
-# `{"command": "...", "args": [...]}` shape Claude Desktop uses. OpenCode also
+# `{"command": "...", "args": [...]}` shape Claude Desktop uses. The harness also
 # accepts the `mcpServers` key for compatibility; this script writes the native
-# shape because that is the one this version documents in `opencode mcp add`.
+# shape because that is the one this version documents in `rosetta mcp add`.
 #
 # Usage:
-#   scripts/opencode-setup.sh                    # register rosetta -> rosetta.tools
-#   scripts/opencode-setup.sh --module rosetta.demo.mock_mcp_server --name rosetta-mock
-#   scripts/opencode-setup.sh --trace /tmp/rosetta-mcp.jsonl   # record every frame
-#   scripts/opencode-setup.sh --check            # verify only, change nothing
-#   scripts/opencode-setup.sh --print            # print the snippet, write nothing
+#   scripts/harness-setup.sh                    # register rosetta -> rosetta.tools
+#   scripts/harness-setup.sh --module rosetta.demo.mock_mcp_server --name rosetta-mock
+#   scripts/harness-setup.sh --trace /tmp/rosetta-mcp.jsonl   # record every frame
+#   scripts/harness-setup.sh --check            # verify only, change nothing
+#   scripts/harness-setup.sh --print            # print the snippet, write nothing
 #
-# No sudo. No network. Only writes ./opencode.json in the repository root.
+# No sudo. No network. Only writes the harness config in the repository root.
 
 set -euo pipefail
 
@@ -96,7 +96,7 @@ fi
 
 # ------------------------------------------------------------------- write it
 #
-# Merge, never overwrite. opencode.json is shared: it also carries the Rosetta
+# Merge, never overwrite. The harness config is shared: it also carries the Rosetta
 # agent definitions, permission rules and instruction paths that another
 # workstream owns. Writing the whole file from here would silently delete them.
 if [[ "${MODE}" == "write" ]]; then
@@ -123,7 +123,7 @@ if os.path.exists(path):
 existing.setdefault("$schema", "https://opencode.ai/config.json")
 servers = existing.setdefault("mcp", {})
 if servers.get(name) == entry:
-    print(f"opencode.json already registers {name!r} -> {os.environ['SERVER_MODULE']} (unchanged)")
+    print(f"the harness config already registers {name!r} -> {os.environ['SERVER_MODULE']} (unchanged)")
     raise SystemExit(0)
 
 servers[name] = entry
@@ -163,12 +163,9 @@ if not found:
 
 if command -v opencode >/dev/null 2>&1; then
   echo
-  echo "--- opencode $(opencode --version) sees it ---"
+  echo "--- Rosetta harness $(opencode --version) sees it ---"
   (cd "${REPO_ROOT}" && opencode mcp list 2>&1 | sed 's/^/  /')
 else
   echo
-  echo "  opencode is not on PATH. Install it with one of:"
-  echo "    npm install -g opencode-ai      # no sudo if npm prefix is user-owned"
-  echo "    brew install sst/tap/opencode"
-  echo "    curl -fsSL https://opencode.ai/install | bash"
+  echo "  The Rosetta harness is not on PATH. See docs/BRANDING.md to install it."
 fi

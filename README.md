@@ -48,7 +48,7 @@ cd /path/to/your/project
 rosetta
 ```
 
-That bare command opens Rosetta's branded, OpenCode-derived TUI in the current
+That bare command opens the Rosetta TUI in the current
 directory. It brings the coding agent, verifier tools, operating instructions
 and workflow commands without writing configuration into your project.
 
@@ -119,7 +119,7 @@ Verified on this machine against a live WorldVistA container. Commands are runna
 | **Split lock** | Written and frozen: 350 train / 150 eval, partitioned by duplicate cluster |
 | **Comprehension labels** | 1,493 pairs from the train split, plus the RFT grader |
 | **Benchmark results** | **None published.** No full run has happened yet. |
-| **Default UI** | `rosetta` — branded OpenCode TUI, project-aware tools and workflow commands |
+| **Default UI** | `rosetta` — the Rosetta TUI, project-aware tools and workflow commands |
 
 The load-bearing demonstration is in the selftest: a `CMP_FLIP` injected into a real VistA
 routine is caught by diffing global state, and the report names the exact node that moved —

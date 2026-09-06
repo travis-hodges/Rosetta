@@ -21,8 +21,8 @@ verifier not available) returns a normal result with ``isError: true`` and a
 readable explanation, because the agent is supposed to read it and try
 something else. Neither ever crashes the server or hangs the pipe.
 
-OpenCode configuration
-----------------------
+Harness configuration
+---------------------
 Add to ``opencode.json`` in the project root (or ``~/.config/opencode/config.json``)::
 
     {

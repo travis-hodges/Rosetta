@@ -1,6 +1,6 @@
 # Rescue verification record — September 6, 2026
 
-Rosetta now provides a working OpenCode terminal entry point, configurable models and
+Rosetta now provides a working terminal entry point, configurable models and
 corpora, executable MUMPS evaluation, and benchmark traces with checked provenance.
 The replacement animated website was developed in the separate **Rosetta website rebuild**
 task and integrated into this checkout. No changes have been committed or deployed.
@@ -8,13 +8,13 @@ task and integrated into this checkout. No changes have been committed or deploy
 ## Delivered
 
 - Dependency-free launcher (`scripts/install.sh`), CLI doctor/code/models/eval/bench/report/
-  demo/tools commands, portable OpenCode configuration, and eight MCP tools.
+  demo/tools commands, portable harness configuration, and eight MCP tools.
 - Explicit model, project, corpus, suite, and dictionary selection. Custom corpora do not
   silently inherit the VA dictionary or contact its container. VA FOIA remains optional.
 - Nonzero failure exits, bounded prompt/model requests, input-preserving eval output,
   and immediate persistence of completed benchmark attempts.
 - Candidate generation with tools disabled and a private working directory enforced via
-  both OpenCode's `--dir` and environment `PWD`; confirmed in actual OpenCode logs.
+  both the harness `--dir` and environment `PWD`; confirmed in actual harness logs.
 - Protocol-2 trace fingerprints and reference-manifest checks; rejection of old/mixed
   protocols, runs, models, budgets, changed tasks, and unscoreable comparisons. Reports
   use bounded repair results instead of treating feedback retries as independent pass@3.
@@ -66,7 +66,7 @@ Original RGUTUU and LRLRRVF eval references each passed all six self-comparison 
 and their original injected defects were detected with no void cases. Under protocol
 `isolated-harness-feedback/2`, `opencode/mimo-v2.5-free` reproduced the original LRLRRVF
 reference exactly, passing all six original cases. Actual model events contained no tool
-calls, and OpenCode logs confirmed its private working directory.
+calls, and harness logs confirmed its private working directory.
 
 The matching feedback-condition request exceeded its 120-second provider deadline.
 There is **no comparable model benchmark score**. The report correctly refuses publication

@@ -11,7 +11,7 @@ Runs one demo task twice:
 ``tools_on``
     The agent gets Rosetta's MCP tools. Every ``verify_change`` call goes over
     real MCP stdio to ``python3 -m rosetta.tools`` -- the same protocol
-    boundary OpenCode uses -- and the verifier's divergence text is fed back so
+    boundary the harness uses -- and the verifier's divergence text is fed back so
     the agent can repair.
 
 Every frame that matters is appended to ``results/<run_id>.jsonl``: the
@@ -45,7 +45,7 @@ from typing import Any, Sequence
 
 from rosetta.core.interface import Divergence
 
-from .agents import Agent, AgentUnavailable, Attempt, OpenCodeAgent, ScriptedAgent
+from .agents import Agent, AgentUnavailable, Attempt, RosettaAgent, ScriptedAgent
 from .mcp_stdio_client import McpError, McpStdioClient
 from .tasks import DemoTask, get_task, repo_root
 from .verify import CaseVerdict, TaskVerdict, VerifierUnavailable
@@ -447,9 +447,9 @@ def run_condition(
 def _make_agent(backend: str, tools_on: bool, model: str | None) -> Agent:
     if backend == "scripted":
         return ScriptedAgent()
-    if backend == "opencode":
-        return OpenCodeAgent(model=model, tools_on=tools_on, cwd=str(repo_root()))
-    raise ValueError(f"unknown agent backend {backend!r} (scripted|opencode)")
+    if backend == "rosetta":
+        return RosettaAgent(model=model, tools_on=tools_on, cwd=str(repo_root()))
+    raise ValueError(f"unknown agent backend {backend!r} (scripted|rosetta)")
 
 
 def run_task(
@@ -520,10 +520,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--backend",
         default="scripted",
-        choices=("scripted", "opencode"),
-        help="scripted = offline replay (no model); opencode = real CLI, needs credentials",
+        choices=("scripted", "rosetta"),
+        help="scripted = offline replay (no model); rosetta = real CLI, needs credentials",
     )
-    parser.add_argument("--model", default=None, help="provider/model for --backend opencode")
+    parser.add_argument("--model", default=None, help="provider/model for --backend rosetta")
     parser.add_argument("--tools", default="both", choices=("off", "on", "both"))
     parser.add_argument("--out", default=None, help="output directory (default results/)")
     parser.add_argument("--run-id", default=None)

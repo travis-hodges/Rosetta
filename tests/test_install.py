@@ -203,24 +203,24 @@ class SourceInstallationTests(unittest.TestCase):
     def run_cli(self, *args):
         return subprocess.run([str(self.launcher), *args], cwd=self.directory, env=self.env, text=True, capture_output=True)
 
-    def fake_opencode(self, body):
+    def fake_harness(self, body):
         executable = self.bin_dir / "opencode"
         executable.write_text("#!/bin/sh\n" + body)
         executable.chmod(0o755)
 
     def test_help_and_status_from_unrelated_directory(self):
         self.assertEqual(self.run_cli("--help").returncode, 0)
-        self.fake_opencode("exit 0\n")
+        self.fake_harness("exit 0\n")
         result = self.run_cli("status", "--plain")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("workflows", result.stdout)
         self.assertIn("this checkout", result.stdout)
 
-    def test_missing_opencode_blocks_the_tui(self):
+    def test_missing_harness_blocks_the_tui(self):
         self.assertEqual(self.run_cli("code", "--prompt", "hello").returncode, 2)
 
     def test_launcher_forwards_cwd_arguments_and_child_exit(self):
-        self.fake_opencode('pwd\nprintf "%s\\n" "$@"\nexit 7\n')
+        self.fake_harness('pwd\nprintf "%s\\n" "$@"\nexit 7\n')
         result = self.run_cli("code", "--model", "local/specialist", "--prompt", "hello '$` world")
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertIn(str(self.directory.resolve()), result.stdout)
@@ -229,7 +229,7 @@ class SourceInstallationTests(unittest.TestCase):
         self.assertEqual(self.run_cli("models").returncode, 7)
 
     def test_bare_launcher_opens_tui_in_current_project(self):
-        self.fake_opencode('pwd\nprintf "%s\\n" "$@"\nexit 0\n')
+        self.fake_harness('pwd\nprintf "%s\\n" "$@"\nexit 0\n')
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = result.stdout.splitlines()
@@ -241,13 +241,13 @@ class SourceInstallationTests(unittest.TestCase):
     def test_project_path_is_the_default_tui_and_mumps_corpus(self):
         project = self.directory / "target project"
         project.mkdir()
-        self.fake_opencode('printf "%s\\n" "$PWD" "$ROSETTA_CORPUS_DIR" "$@"\nexit 0\n')
+        self.fake_harness('printf "%s\\n" "$PWD" "$ROSETTA_CORPUS_DIR" "$@"\nexit 0\n')
         result = self.run_cli(str(project))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines()[:2], [str(project.resolve()), str(project.resolve())])
 
     def test_tui_receives_the_rosetta_presentation_preset(self):
-        self.fake_opencode('printf "%s\\n" "$OPENCODE_TUI_CONFIG"\nexit 0\n')
+        self.fake_harness('printf "%s\\n" "$OPENCODE_TUI_CONFIG"\nexit 0\n')
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
@@ -256,7 +256,7 @@ class SourceInstallationTests(unittest.TestCase):
         )
 
     def test_tui_receives_the_rosetta_theme_directory(self):
-        self.fake_opencode('printf "%s\\n" "$OPENCODE_CONFIG_DIR"\nexit 0\n')
+        self.fake_harness('printf "%s\\n" "$OPENCODE_CONFIG_DIR"\nexit 0\n')
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
@@ -267,13 +267,13 @@ class SourceInstallationTests(unittest.TestCase):
     def test_an_explicit_tui_preset_override_is_preserved(self):
         override = self.directory / "operator-tui.json"
         self.env["OPENCODE_TUI_CONFIG"] = str(override)
-        self.fake_opencode('printf "%s\\n" "$OPENCODE_TUI_CONFIG"\nexit 0\n')
+        self.fake_harness('printf "%s\\n" "$OPENCODE_TUI_CONFIG"\nexit 0\n')
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), str(override))
 
     def test_prompt_timeout_does_not_echo_private_prompt(self):
-        self.fake_opencode("exec /bin/sleep 3\n")
+        self.fake_harness("exec /bin/sleep 3\n")
         result = self.run_cli("code", "--prompt", "PRIVATE_SENTINEL", "--timeout", "0.05")
         self.assertEqual(result.returncode, 124, result.stderr)
         self.assertNotIn("PRIVATE_SENTINEL", result.stderr)

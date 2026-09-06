@@ -4,7 +4,7 @@ Install a dependency-free launcher with
 `bash scripts/install.sh --bin-dir "$HOME/.local/bin"`. The installer never overwrites an
 existing file or changes your shell settings. Keep the checkout and interpreter in place.
 Optional pip editable installation is also supported by the package metadata.
-Then `cd` to a project and run `rosetta`. That opens the branded TUI with
+Then `cd` to a project and run `rosetta`. That opens the Rosetta TUI with
 Rosetta Agent, Plan, and Verify modes, MCP tools, instructions, and slash
 commands injected in memory; it does not write `.opencode` files into the
 project. `rosetta /another/project` opens a different directory.
@@ -16,7 +16,7 @@ Rosetta is always enabled. Press Tab to move between:
 - **Rosetta Plan** — read-only routine, call, global, and case planning.
 - **Rosetta Verify** — read-only executable proof and divergence explanation.
 
-The default model ID remains `opencode/big-pickle`, but Rosetta presents it as
+The default model ID remains the harness's built-in `opencode/big-pickle`, but Rosetta presents it as
 **Translator 1.0** in the product UI. This is a display identity, not evidence
 of MUMPS specialization; benchmark it before making a capability claim.
 
@@ -42,12 +42,12 @@ recorded provenance badge.
 
 ## Models
 
-Use the TUI's `/models` command or `rosetta models` to see models available to the installed OpenCode.
+Use the TUI's `/models` command or `rosetta models` to see the models your install can reach.
 Choose `--model provider/model` when coding or benchmarking. Rosetta does not download
 weights, train a model, or start a model server implicitly.
 
 For a specialist served through an OpenAI-compatible local endpoint, add a provider to
-your own OpenCode configuration (replace the endpoint and served model ID):
+your own harness configuration (replace the endpoint and served model ID):
 
 ```json
 {
@@ -66,7 +66,7 @@ your own OpenCode configuration (replace the endpoint and served model ID):
 Then use `--model specialist/your-served-model-id`. The server must already be running,
 and its model must support the chosen workflow. A configured name does not establish
 model quality; measure it. Provider setup follows the official
-[OpenCode providers documentation](https://opencode.ai/docs/providers/#custom-provider)
+[upstream providers documentation](https://opencode.ai/docs/providers/#custom-provider)
 and [configuration documentation](https://opencode.ai/docs/config/).
 
 Hosted providers receive the code sent to them. Local operation requires a local model
