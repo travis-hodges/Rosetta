@@ -15,6 +15,7 @@ const PAGES = [
   { file: 'index.html', module: 'src/main.js' },
   { file: 'download.html', module: 'src/download.js' },
 ];
+const DIRECTORY_ROUTES = new Set(['/slideshow']);
 for (const page of PAGES) {
   page.html = await read(page.file);
   page.script = await read(page.module);
@@ -37,6 +38,7 @@ test('every local asset every page references exists', async () => {
     assert.ok(normalized.includes(`/${module}`), `${file} must load ${module}`);
     assert.ok(normalized.includes('/src/styles.css'), `${file} must load the stylesheet`);
     for (const reference of references) {
+      if (DIRECTORY_ROUTES.has(reference)) continue;
       const path = reference.replace(/^(?:\.\/|\/)/, '');
       // Clean URLs: /download is a page route, not a file on disk.
       if (PAGES.some(page => page.file === `${path}.html`) || PAGES.some(page => page.file === path)) continue;
@@ -81,6 +83,13 @@ test('in-page navigation targets real sections', () => {
     for (const match of markup.matchAll(/href="#([^"]+)"/g)) {
       assert.ok(markup.includes(`id="${match[1]}"`), `${file}: dead anchor #${match[1]}`);
     }
+  }
+});
+
+test('every public footer links to the slideshow', () => {
+  for (const { file, html: markup } of PAGES) {
+    assert.match(markup, /<footer\b[\s\S]*href="\/slideshow"[^>]*>Slideshow ↗<\/a>/,
+      `${file}: footer must link to /slideshow`);
   }
 });
 
@@ -184,6 +193,14 @@ test('the build produces a servable site and unknown paths 404', async t => {
   const [code] = await once(build, 'exit');
   assert.equal(code, 0);
   assert.equal(await readFile(new URL('dist/index.html', site), 'utf8'), html);
+  const slideshow = await readFile(new URL('dist/slideshow.html', site), 'utf8');
+  assert.match(slideshow, /id="deck"/);
+  assert.match(slideshow, /href="\/slideshow\/pitch\.css"/);
+  assert.match(slideshow, /src="\/slideshow\/pitch\.js"/);
+  assert.equal(
+    await readFile(new URL('dist/slideshow/index.html', site), 'utf8'),
+    await read('pitch/index.html'),
+  );
 
   const server = spawn(process.execPath, ['scripts/serve.mjs', '--dist'], {
     cwd: site, env: { ...process.env, PORT: '0' }, stdio: 'pipe',
@@ -216,6 +233,13 @@ test('the build produces a servable site and unknown paths 404', async t => {
   const page = await fetch(base + '/download');
   assert.equal(page.status, 200, '/download must resolve via cleanUrls');
   assert.match(await page.text(), /id="release-panel"/);
+
+  const slideshowPage = await fetch(base + '/slideshow');
+  assert.equal(slideshowPage.status, 200, '/slideshow must resolve via cleanUrls');
+  assert.match(await slideshowPage.text(), /id="deck"/);
+  for (const path of ['/slideshow/pitch.css', '/slideshow/pitch.js']) {
+    assert.equal((await fetch(base + path)).status, 200, `${path} must be served`);
+  }
 
   const installer = await fetch(base + '/install.sh');
   assert.equal(installer.status, 200, '/install.sh must be served');

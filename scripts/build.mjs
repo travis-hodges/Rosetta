@@ -7,6 +7,7 @@ import { Script } from 'node:vm';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dist = join(root, 'dist');
+const slideshowRoute = '/slideshow';
 
 // Every top-level .html file is a page. Discovered rather than listed, so adding a
 // page cannot silently fail to publish -- and so a stray copy cannot silently start.
@@ -31,6 +32,9 @@ for (const page of pages) {
     const path = reference[1];
     // Clean URLs: /download is served by download.html, so it is a page, not a file.
     if (pages.includes(`${path.slice(1)}.html`)) continue;
+    // The presentation is authored in pitch/ but published at the product-facing
+    // /slideshow route below.
+    if (path === slideshowRoute) continue;
     // public/ flattens onto the site root, so /og.png is public/og.png.
     await readFile(join(root, path))
       .catch(() => readFile(join(root, 'public', path)))
@@ -47,6 +51,11 @@ for (const page of pages) {
 }
 await cp(join(root, 'src'), join(dist, 'src'), { recursive: true });
 await cp(join(root, 'pitch'), join(dist, 'pitch'), { recursive: true });
+await cp(join(root, 'pitch'), join(dist, 'slideshow'), { recursive: true });
+const slideshow = (await readFile(join(root, 'pitch', 'index.html'), 'utf8'))
+  .replace('href="./pitch.css"', 'href="/slideshow/pitch.css"')
+  .replace('src="./pitch.js"', 'src="/slideshow/pitch.js"');
+await writeFile(join(dist, 'slideshow.html'), slideshow);
 await cp(join(root, 'public'), dist, { recursive: true });
 
-console.log(`Built Rosetta site → dist/ (${pages.join(', ')})`);
+console.log(`Built Rosetta site → dist/ (${pages.join(', ')}, slideshow.html)`);
