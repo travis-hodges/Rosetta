@@ -1,4 +1,7 @@
-import { tool } from "@opencode-ai/plugin"
+// OpenCode's `tool()` helper is intentionally an identity function. Keeping the
+// tiny equivalent here makes the shipped TUI plugin cold-start offline without
+// a nested npm install.
+const tool = (definition) => definition
 
 let loaded = false
 

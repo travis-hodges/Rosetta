@@ -36,7 +36,6 @@ jobs:
           python -m unittest discover -s tests
           npm test
           node scripts/build.mjs
-          done
 
       - name: Tag must match rosetta.__version__
         run: |
