@@ -128,6 +128,16 @@ const tabOrientation = matchMedia('(max-width: 760px)');
 function syncTabOrientation() { document.querySelector('.language-tabs').setAttribute('aria-orientation', tabOrientation.matches ? 'horizontal' : 'vertical'); }
 tabOrientation.addEventListener('change', syncTabOrientation);
 syncTabOrientation();
+// The install command must name the host actually serving this page, so it is
+// templated in the markup and filled in here. Hard-coding a domain is how a page
+// ends up telling people to curl a host that does not resolve.
+document.querySelectorAll('[data-origin-command]').forEach(node => {
+  const command = node.dataset.originCommand.replace('{origin}', location.origin);
+  node.textContent = command;
+  const button = node.closest('.command-row')?.querySelector('[data-copy]');
+  if (button) button.dataset.copy = command;
+});
+
 let copyTimer;
 document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
   const status = document.querySelector('#copy-status');

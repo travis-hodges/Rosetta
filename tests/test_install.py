@@ -158,14 +158,14 @@ class SourceInstallationTests(unittest.TestCase):
         self.directory = Path(self.temporary.name)
         self.checkout = self.directory / "source $with `characters`"
         self.checkout.mkdir()
-        shutil.copytree(cli.ROOT / "rosetta", self.checkout / "rosetta", ignore=shutil.ignore_patterns("__pycache__"))
-        shutil.copytree(cli.ROOT / ".opencode" / "agent", self.checkout / ".opencode" / "agent")
-        shutil.copytree(cli.ROOT / ".opencode" / "plugins", self.checkout / ".opencode" / "plugins")
-        shutil.copy(cli.ROOT / ".opencode" / "instructions.md", self.checkout / ".opencode")
-        shutil.copy(cli.ROOT / "opencode.json", self.checkout)
-        (self.checkout / "data").symlink_to(cli.ROOT / "data", target_is_directory=True)
+        shutil.copytree(cli.REPO_ROOT / "rosetta", self.checkout / "rosetta", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(cli.REPO_ROOT / ".opencode" / "agent", self.checkout / ".opencode" / "agent")
+        shutil.copytree(cli.REPO_ROOT / ".opencode" / "plugins", self.checkout / ".opencode" / "plugins")
+        shutil.copy(cli.REPO_ROOT / ".opencode" / "instructions.md", self.checkout / ".opencode")
+        shutil.copy(cli.REPO_ROOT / "opencode.json", self.checkout)
+        (self.checkout / "data").symlink_to(cli.REPO_ROOT / "data", target_is_directory=True)
         (self.checkout / "scripts").mkdir()
-        shutil.copy(cli.ROOT / "scripts" / "install.sh", self.checkout / "scripts")
+        shutil.copy(cli.REPO_ROOT / "scripts" / "install.sh", self.checkout / "scripts")
         self.bin_dir = self.directory / "my bin"
         self.env = os.environ.copy()
         self.env["ROSETTA_PYTHON"] = sys.executable

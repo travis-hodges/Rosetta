@@ -217,5 +217,77 @@ class CaseSourceTests(unittest.TestCase):
                 cases_for(None, "X", str(p))
 
 
+class PublishedSurfaceTests(unittest.TestCase):
+    """The website is a download channel, so its commands are part of the CLI's
+    contract. `rosetta code` and `rosetta eval` were removed while the landing page
+    still shipped copy buttons for both, which meant the first thing a visitor
+    pasted into a terminal returned exit 2. A page cannot advertise a command the
+    parser does not have.
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+
+    def _subcommands(self) -> set[str]:
+        from rosetta.cli import build_parser
+
+        actions = build_parser()._subparsers._group_actions  # type: ignore[union-attr]
+        return set(actions[0].choices)
+
+    def _pages(self) -> list[Path]:
+        pages = sorted(self.ROOT.glob("*.html"))
+        self.assertTrue(pages, "no published pages found")
+        return pages
+
+    def _invocations(self, text: str) -> set[str]:
+        """Commands the page actually offers: copy-button payloads and <code>
+        contents. Prose like "Rosetta pairs OpenCode" is not an invocation.
+        """
+        import re
+
+        sources = re.findall(r'data-copy="([^"]*)"', text)
+        sources += re.findall(r"data-origin-command=\"([^\"]*)\"", text)
+        sources += re.findall(r"<code[^>]*>(.*?)</code>", text, re.S)
+        found = set()
+        for source in sources:
+            for match in re.finditer(r"(?:python3 -m )?\brosetta\s+([a-z][a-z-]*)", source):
+                found.add(match.group(1))
+        return found
+
+    def test_every_command_the_site_advertises_exists(self) -> None:
+        known = self._subcommands()
+        for page in self._pages():
+            for name in sorted(self._invocations(page.read_text(encoding="utf-8"))):
+                self.assertIn(
+                    name, known,
+                    f"{page.name} offers `rosetta {name}`, which the CLI does not have. "
+                    f"Known: {', '.join(sorted(known))}",
+                )
+
+    def test_the_install_command_is_not_a_dead_link(self) -> None:
+        installer = self.ROOT / "public" / "install.sh"
+        self.assertTrue(installer.is_file(), "public/install.sh must exist to be served")
+        body = installer.read_text(encoding="utf-8")
+        self.assertIn("PINNED_VERSION=", body)
+        # The installer delegates launcher creation to the one script that already
+        # gets it right; if that path moves, the install breaks after the download.
+        self.assertIn("scripts/install.sh", body)
+        self.assertTrue((self.ROOT / "scripts" / "install.sh").is_file())
+
+    def test_version_is_reported_and_single_sourced(self) -> None:
+        import rosetta
+
+        result = subprocess.run(
+            [sys.executable, "-m", "rosetta", "--version"],
+            capture_output=True, text=True, cwd=self.ROOT,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), f"rosetta {rosetta.__version__}")
+        # pyproject must read the attribute rather than carry its own copy, or a
+        # published wheel can disagree with the source it was built from.
+        pyproject = (self.ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('version = {attr = "rosetta.__version__"}', pyproject)
+        self.assertNotIn(f'version = "{rosetta.__version__}"', pyproject)
+
+
 if __name__ == "__main__":
     unittest.main()

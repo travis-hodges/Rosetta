@@ -135,4 +135,52 @@
 @media(prefers-reduced-motion:reduce){
   .hero h1>span,.threat-ring,.risk-card:before,.mission-track,.tui-window:after,.tui-beacon,.proof-section:before,.proof-loop article,.proof-beam i,.feature-signal i,.mini-bars i{animation:none!important}
   .risk-meter i{transform:scaleX(var(--risk))}
+/* ---------------------------------------------------------------- download page
+   Reuses the landing page's tokens, kickers, command rows and footer. Only the
+   release panel and the payload grid are new, because only they have no analogue
+   on the front page. */
+.page-download{background:var(--paper)}
+.download-page{padding-top:86px}
+.download-page .section-heading{margin:55px 0 40px}
+.download-page h2{font-size:clamp(40px,5.2vw,78px)}
+.download-page h3{font-weight:400;letter-spacing:-.04em}
+.download-page code{font:12px/1.7 'SFMono-Regular',Consolas,'Liberation Mono',monospace;overflow-wrap:anywhere}
+.alt-band{background:#e2e4d9}
+
+.release-panel{border-top:1px solid var(--line);padding-top:28px}
+.release-pending{padding:8px 0 4px}
+.release-pending>.mono{display:block;font-size:9px;color:var(--muted);margin-bottom:14px}
+.release-pending p{font-size:13px;max-width:560px}
+.release-head{display:flex;align-items:flex-end;justify-content:space-between;gap:36px;flex-wrap:wrap;margin-bottom:8px}
+.release-head>div>.mono{display:block;font-size:9px;color:var(--muted);margin-bottom:8px}
+.release-head h3{font-size:58px;letter-spacing:-.06em;line-height:1;margin:0}
+.release-facts{display:flex;gap:34px;margin:0}
+.release-facts dt{font-size:8px;color:var(--muted);margin-bottom:6px}
+.release-facts dd{margin:0;font-size:12px}
+.release-artifact{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px 16px;border-top:1px solid var(--line);padding-top:18px;margin-top:4px}
+.release-artifact>.mono{font-size:8px;color:var(--muted)}
+.release-artifact a{font-size:12px;text-decoration:underline;text-underline-offset:4px}
+.release-sha{font-size:11px;word-break:break-all}
+.release-artifact button{grid-column:3;align-self:center;font-size:9px;border:1px solid #b5baa6;padding:9px 11px;background:transparent;min-width:53px}
+.release-artifact button:hover{background:var(--ink);color:var(--acid)}
+
+.payload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:34px}
+.payload-grid article{border-top:1px solid var(--line);padding-top:22px}
+.payload-grid>article>.mono{font-size:8px;color:var(--muted)}
+.payload-grid h3{font-size:38px;margin:18px 0 14px;line-height:1}
+.payload-grid p{font-size:12px;margin:0}
+
+.download-page .quickstart .command-row:first-child{border-top:1px solid var(--line)}
+.download-page .command-row{border-top-color:var(--line)}
+.download-page .command-row button{border-color:#b5baa6}
+.download-page .command-row .mono{color:var(--muted)}
+
+@media(max-width:1100px){.payload-grid{gap:24px}}
+@media(max-width:760px){
+  .download-page{padding-top:70px}
+  .payload-grid{grid-template-columns:1fr;gap:26px}
+  .release-head h3{font-size:44px}
+  .release-facts{gap:22px;flex-wrap:wrap}
+  .release-artifact{grid-template-columns:1fr;gap:8px}
+  .release-artifact button{grid-column:1;justify-self:start}
 }

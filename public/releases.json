@@ -1,0 +1,26 @@
+{
+  "repository": "https://github.com/travis-hodges/Rosetta",
+  "latest": {
+    "version": "0.1.0",
+    "tag": "v0.1.0",
+    "published": "2026-09-06",
+    "tarball": "rosetta-0.1.0.tar.gz",
+    "tarball_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.1.0/rosetta-0.1.0.tar.gz",
+    "checksums_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.1.0/SHA256SUMS",
+    "sha256": "1808c126df0c40c34ba7744e83628d0e7c688903bde58de96a7e3fdf430b5967",
+    "size": "2.0M"
+  },
+  "releases": [
+    {
+      "version": "0.1.0",
+      "tag": "v0.1.0",
+      "published": "2026-09-06",
+      "tarball": "rosetta-0.1.0.tar.gz",
+      "tarball_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.1.0/rosetta-0.1.0.tar.gz",
+      "checksums_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.1.0/SHA256SUMS",
+      "sha256": "1808c126df0c40c34ba7744e83628d0e7c688903bde58de96a7e3fdf430b5967",
+      "size": "2.0M"
+    }
+  ],
+  "_comment": "Written by .github/workflows/release.yml. Never hand-edit: a stale version or checksum on the download page is worse than none."
+}
