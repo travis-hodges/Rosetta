@@ -7,14 +7,17 @@ is ever written by a test, and no fixture number is ever published.
 from __future__ import annotations
 
 import json
+import hashlib
 import tempfile
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock, patch
 
 from rosetta.bench import build as B
 from rosetta.bench import report as R
+from rosetta.bench import run as RUN
 from rosetta.bench import score as S
 from rosetta.bench import split as SPLIT
 from rosetta.bench import trace as T
@@ -90,6 +93,10 @@ def rec(
         tool_calls=calls,
         verdict=verdict,
         harness_error=harness_error,
+        run_id="fixture-run",
+        extra={"protocol": T.PROTOCOL, "attempt_budget": 3, "model_timeout_s": 120.0,
+               "agent_tools_enabled": False,
+               "task_sha256": hashlib.sha256(task_id.encode()).hexdigest()},
     )
 
 
@@ -461,6 +468,69 @@ def _traces_and_task_set(n_tasks: int = 4) -> tuple[list[T.TraceRecord], dict[st
 
 
 class TestReport(unittest.TestCase):
+    def test_refuses_legacy_and_mixed_protocols(self) -> None:
+        records, task_set = _traces_and_task_set()
+        records[0].extra.pop("protocol")
+        with self.assertRaisesRegex(R.ReportRefused, "protocol"):
+            R.build_report(records, task_set=task_set)
+
+    def test_refuses_mixed_runs_models_and_budgets(self) -> None:
+        from dataclasses import replace
+        for changes in ({"run_id": "different"}, {"model": "another-model"},
+                        {"extra": {"attempt_budget": 2}}):
+            records, task_set = _traces_and_task_set()
+            if "extra" in changes:
+                changes = {"extra": {**records[0].extra, **changes["extra"]}}
+            records[0] = replace(records[0], **changes)
+            with self.assertRaises(R.ReportRefused):
+                R.build_report(records, task_set=task_set)
+
+    def test_refuses_reference_or_suite_changed_after_run(self) -> None:
+        records, task_set = _traces_and_task_set()
+        for task in task_set["tasks"]:
+            task.update(baseline_src="RTN ; reference", mutated_src="RTN ; mutant", cases=[])
+            for record in records:
+                if record.task_id == task["task_id"]:
+                    record.extra["task_sha256"] = T.task_fingerprint(task)
+        R.build_report(records, task_set=task_set)
+        task_set["tasks"][0]["baseline_src"] += "corruption"
+        with self.assertRaisesRegex(R.ReportRefused, "fingerprint"):
+            R.build_report(records, task_set=task_set)
+
+    def test_detail_identifies_protocol_and_partial_coverage(self) -> None:
+        records, task_set = _traces_and_task_set()
+        report = R.build_report(records[:2], task_set=task_set)
+        self.assertTrue(report.detail["coverage"]["partial"])
+        self.assertEqual(report.detail["coverage"]["common_scoreable_task_count"], 1)
+        self.assertEqual(report.detail["protocol"]["id"], T.PROTOCOL)
+
+    def test_bounded_repair_counts_early_success_and_refuses_incomplete_rate(self) -> None:
+        records, task_set = _traces_and_task_set(1)
+        # A pass on attempt one completes a budgeted task without extra sampling.
+        report = R.build_report(records, task_set=task_set)
+        self.assertEqual(report.detail["bounded_attempts"]["baseline"]["success_rate"], 1)
+        records = [rec(c, records[0].task_id, routine=records[0].routine)
+                   for c in ("baseline", "scaffolded")]
+        report = R.build_report(records, task_set=task_set)
+        self.assertIsNone(report.detail["bounded_attempts"]["baseline"]["success_rate"])
+        for c in ("baseline", "scaffolded"):
+            records.extend(rec(c, records[0].task_id, routine=records[0].routine,
+                               attempt=a, passed=(a == 2)) for a in (2, 3))
+        report = R.build_report(records, task_set=task_set)
+        self.assertEqual(report.detail["bounded_attempts"]["scaffolded"]["success_rate"], 1)
+        self.assertEqual(report.detail["bounded_attempts"]["scaffolded"]["mean_attempts_to_success"], 2)
+
+    def test_partial_comparison_preserves_provider_exclusions(self) -> None:
+        from dataclasses import replace
+        records, task_set = _traces_and_task_set(2)
+        records[1] = replace(records[1], verdict=None, harness_error="provider timeout")
+        report = R.build_report(records, task_set=task_set)
+        excluded = report.detail["coverage"]["condition_exclusions"]["scaffolded"]
+        self.assertEqual(excluded["reasons"], {"harness_error": 1})
+        self.assertEqual(excluded["task_exclusions"], [records[1].task_id + ":harness_error"])
+        with self.assertRaisesRegex(R.ReportRefused, "harness_error"):
+            R.build_report(records[:2], task_set=task_set)
+
     def test_summary_matches_the_published_schema(self) -> None:
         records, task_set = _traces_and_task_set()
         report = R.build_report(records, task_set=task_set)
@@ -596,6 +666,60 @@ class TestReport(unittest.TestCase):
         self.assertIn("pass@1", text)
         self.assertIn("per operator", text)
         self.assertIn("CMP_FLIP", text)
+        self.assertIn("repair≤3", text)
+        self.assertIn("Harness feedback", text)
+        self.assertNotIn("pass@3", text)
+        self.assertNotIn("pass_at_3", R.build_report(records, task_set=task_set).detail["run"]["conditions"]["scaffolded"])
+
+
+class TestBenchmarkExecution(unittest.TestCase):
+    def task(self):
+        return {"task_id": "fixture", "routine": "RTN", "baseline_src": "RTN ; original\n",
+                "mutated_src": "RTN ; mutant\n", "cases": [{"routine": "RTN", "entry": ""}]}
+
+    def test_corrupted_reference_is_rejected_before_model_calls(self):
+        task = self.task()
+        manifest = {"RTN": hashlib.sha256(task["baseline_src"].encode()).hexdigest()}
+        task["baseline_src"] += "corrupted"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tasks.json"
+            path.write_text(json.dumps({"tasks": [task], "routine_sources": manifest}))
+            with self.assertRaisesRegex(RUN.RunRefused, "source manifest"):
+                RUN.load_taskset(path)
+
+    def test_attempts_persist_before_later_interruption(self):
+        agent = Mock(transcripts=[])
+        agent.propose.side_effect = [Mock(candidate_src="RTN ; candidate\n", explanation=""),
+                                     KeyboardInterrupt()]
+        from rosetta.core.interface import VerifyReport
+        verify = Mock(return_value=VerifyReport(equivalent=False, n_cases=1, n_diverged=1,
+                                               divergences=[]))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "trace.jsonl"
+            with self.assertRaises(KeyboardInterrupt):
+                RUN.run_task(self.task(), "scaffolded", agent, verify, "test", "model", 2,
+                             on_record=lambda r: T.write_traces([r], path, append=True))
+            records = T.read_traces(path)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].extra["protocol"], T.PROTOCOL)
+            self.assertEqual(records[0].extra["feedback_received"], [])
+
+    def test_decline_is_preserved_as_ungraded_attempt(self):
+        agent = Mock(transcripts=[])
+        agent.propose.return_value = None
+        records = RUN.run_task(self.task(), "baseline", agent, Mock(), "test", "model", 2)
+        self.assertEqual(len(records), 1)
+        self.assertIn("no candidate", records[0].harness_error)
+
+    def test_model_timeout_is_forwarded_and_errors_persist(self):
+        with tempfile.TemporaryDirectory() as tmp, patch("rosetta.demo.agents.OpenCodeAgent") as cls:
+            cls.return_value.propose.side_effect = TimeoutError("fixture timeout")
+            path = RUN.run_benchmark({"tasks": [self.task()]}, ["baseline", "scaffolded"],
+                                     "opencode", "fixture-model", 1, Path(tmp), model_timeout_s=7)
+            self.assertEqual(cls.call_args.kwargs["timeout_s"], 7)
+            records = T.read_traces(path)
+            self.assertEqual(len(records), 2)
+            self.assertTrue(all("timeout" in r.harness_error for r in records))
 
 
 if __name__ == "__main__":

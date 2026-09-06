@@ -14,7 +14,7 @@ const script = await readFile(join(root, 'src/main.js'), 'utf8');
 new Script(script, { filename: 'src/main.js' });
 
 for (const reference of html.matchAll(/(?:href|src)="(\/[^"]+)"/g)) {
-  await readFile(join(root, reference[1])).catch(() => readFile(join(root, 'public', reference[1]))).catch(() => {
+  await readFile(join(root, reference[1])).catch(() => {
     throw new Error(`index.html references ${reference[1]}, which does not exist`);
   });
 }

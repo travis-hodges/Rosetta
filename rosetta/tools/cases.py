@@ -28,6 +28,7 @@ never writes ``data/tasks/split.lock.json`` and never writes anything at all.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 from typing import Any, Iterator
@@ -141,9 +142,12 @@ class SuiteStore:
     """Reads per-routine input suites from ``data/tasks/suites/``."""
 
     def __init__(self, suites_dir: Path | None = None) -> None:
-        self.suites_dir = suites_dir or DEFAULT_SUITES_DIR
+        task_dir = Path(os.environ.get("ROSETTA_TASKS_DIR") or DEFAULT_TASKS_DIR)
+        self.suites_dir = Path(suites_dir or os.environ.get("ROSETTA_SUITES_DIR") or task_dir / "suites").expanduser()
 
     def path_for(self, routine: str) -> Path:
+        from .sources import normalise_name
+        normalise_name(routine)
         return self.suites_dir / f"{routine.upper()}.json"
 
     def available(self) -> list[str]:
@@ -171,7 +175,7 @@ class TaskStore:
     """Reads generated mutation tasks from ``data/tasks/``."""
 
     def __init__(self, tasks_dir: Path | None = None) -> None:
-        self.tasks_dir = tasks_dir or DEFAULT_TASKS_DIR
+        self.tasks_dir = Path(tasks_dir or os.environ.get("ROSETTA_TASKS_DIR") or DEFAULT_TASKS_DIR).expanduser()
         self._index: dict[str, MutationTaskRecord] | None = None
 
     def _candidates(self) -> list[Path]:
@@ -206,14 +210,16 @@ class TaskStore:
             for raw in self._iter_records():
                 try:
                     rec = MutationTaskRecord.from_dict(raw)
-                except ValueError:
-                    continue
+                except ValueError as exc:
+                    raise ValueError(f"invalid task in {self.tasks_dir}: {exc}") from exc
                 out[rec.task_id] = rec
             self._index = out
         return self._index
 
     def load(self, task_id: str) -> MutationTaskRecord:
         """Return one task. Raises :class:`CasesUnavailable` if not found."""
+        if not task_id or Path(task_id).name != task_id or task_id in {".", ".."}:
+            raise ValueError("task_id must be a file name, not a path")
         single = self.tasks_dir / f"{task_id}.json"
         if single.is_file():
             return MutationTaskRecord.from_dict(

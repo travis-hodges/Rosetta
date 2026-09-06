@@ -29,7 +29,7 @@ CONFIG="${REPO_ROOT}/opencode.json"
 
 SERVER_NAME="rosetta"
 SERVER_MODULE="rosetta.tools"
-CONTAINER="${ROSETTA_TOOLS_CONTAINER:-vehu}"
+CONTAINER="${ROSETTA_TOOLS_CONTAINER:-off}"
 BACKEND="${ROSETTA_TOOLS_BACKEND:-auto}"
 TRACE_LOG=""
 MODE="write"
@@ -67,7 +67,6 @@ trace = os.environ["TRACE_LOG"]
 
 command = ["python3", "-m", module]
 env = {
-    "PYTHONPATH": root,
     "PYTHONUNBUFFERED": "1",
     "ROSETTA_TOOLS_BACKEND": os.environ["BACKEND"],
     "ROSETTA_TOOLS_CONTAINER": os.environ["CONTAINER"],
@@ -145,14 +144,20 @@ echo "--- the server answers tools/list on its own ---"
   printf '%s\n%s\n' \
     '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
     '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
-  | PYTHONPATH="${REPO_ROOT}" "${PY}" -m "${SERVER_MODULE}" 2>/dev/null \
+  | PYTHONPATH="${REPO_ROOT}" "${PY}" -m "${SERVER_MODULE}" \
   | "${PY}" -c '
 import json, sys
+found = False
 for line in sys.stdin:
     frame = json.loads(line)
     if frame.get("id") == 2:
         names = [t["name"] for t in frame["result"]["tools"]]
+        if not names:
+            sys.exit("MCP returned no tools")
+        found = True
         print(f"  {len(names)} tools: " + ", ".join(names))
+if not found:
+    sys.exit("MCP tools/list returned no response")
 '
 )
 

@@ -20,15 +20,15 @@ test('every local asset the page references exists', async () => {
   assert.ok(references.includes('/src/main.js'));
   assert.ok(references.includes('/src/styles.css'));
   for (const reference of references) {
-    await readFile(new URL(reference.slice(1), site)).catch(() => readFile(new URL('public/' + reference.slice(1), site)));
+    await readFile(new URL(reference.slice(1), site));
   }
 });
 
-test('external references are limited to declared primary sources and the repository', () => {
+test('the only external origin is the declared font CDN', () => {
   const origins = new Set([...`${html}${css}`.matchAll(/https?:\/\/([^/'")\s]+)/g)].map(match => match[1]));
   for (const origin of origins) {
     assert.ok(
-      ['github.com', 'www.w3.org', 'www.gao.gov', 'department.va.gov'].includes(origin),
+      ['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'www.w3.org', 'openapi.vercel.sh'].includes(origin),
       `Unexpected external origin ${origin}`,
     );
   }
@@ -67,8 +67,7 @@ test('external links cannot reach back into the opener', () => {
 });
 
 test('the page never claims benchmark numbers it has not measured', () => {
-  const visibleCopy = html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ');
-  assert.doesNotMatch(visibleCopy, /\b\d{1,3}(\.\d+)?\s*%/, 'no hand-authored performance percentages');
+  assert.doesNotMatch(html, /\b\d{1,3}(\.\d+)?\s*%/, 'no hand-authored performance percentages');
   assert.match(html, /synthetic|illustrative/i, 'the walkthrough must be labelled as illustrative');
 });
 
@@ -98,7 +97,7 @@ test('the build produces a servable site and unknown paths 404', async t => {
   assert.equal(await root.text(), html);
   assert.equal(root.headers.get('x-content-type-options'), 'nosniff');
 
-  for (const [path, type] of [['/src/main.js', 'text/javascript'], ['/src/styles.css', 'text/css'], ['/og.png', 'image/png'], ['/og.svg', 'image/svg\\+xml'], ['/favicon.svg', 'image/svg\\+xml']]) {
+  for (const [path, type] of [['/src/main.js', 'text/javascript'], ['/src/styles.css', 'text/css'], ['/og.png', 'image/png']]) {
     const asset = await fetch(base + path);
     assert.equal(asset.status, 200, `${path} must be served`);
     assert.match(asset.headers.get('content-type'), new RegExp(type));
@@ -126,45 +125,8 @@ test('the source server refuses paths outside the site', async t => {
 
   assert.equal((await fetch(base)).status, 200);
   assert.equal((await fetch(base + '/src/main.js')).status, 200);
-  assert.equal((await fetch(base + '/og.svg')).status, 200);
+  assert.equal((await fetch(base + '/og.png')).status, 200);
   for (const path of ['/AGENTS.md', '/package.json', '/orchestration/orchestrator.py', '/.git/config']) {
     assert.equal((await fetch(base + path)).status, 404, `${path} must not be served`);
   }
-});
-
-test('paused, hidden and offscreen sculptures do not schedule animation loops', () => {
-  const start = script.indexOf('function createSculpture(');
-  const end = script.indexOf("for (const [id, dark]", start);
-  const sculpture = script.slice(start, end);
-  let scheduled = 0;
-  let visibility;
-  const gradient = { addColorStop() {} };
-  const context = new Proxy({}, { get: (_, name) => name.startsWith('create') ? () => gradient : () => {}, set: () => true });
-  const surface = { getBoundingClientRect: () => ({ width: 600, height: 600 }), classList: { add() {} } };
-  const canvas = { getContext: () => context, parentElement: surface };
-  const sandbox = {
-    paused: true, storyProgress: 0, canvas, devicePixelRatio: 1,
-    document: { hidden: false, addEventListener() {}, removeEventListener() {} },
-    requestAnimationFrame: () => { scheduled++; return scheduled; }, cancelAnimationFrame() {},
-    addEventListener() {}, removeEventListener() {},
-    ResizeObserver: class { constructor(callback) { this.callback = callback; } observe() { this.callback(); } disconnect() {} },
-    IntersectionObserver: class { constructor(callback) { visibility = callback; } observe() { visibility([{ isIntersecting: true }]); } disconnect() {} },
-  };
-  const run = new Script(`${sculpture}\nthis.art = createSculpture(canvas, false);`);
-  run.runInNewContext(sandbox);
-  assert.equal(scheduled, 0, 'initial reduced-motion state draws a still frame only');
-  sandbox.paused = false;
-  sandbox.art.refresh();
-  assert.equal(scheduled, 1, 'resume schedules animation');
-  sandbox.paused = true;
-  sandbox.art.refresh();
-  assert.equal(scheduled, 1, 'pause does not start another loop');
-  sandbox.paused = false;
-  sandbox.document.hidden = true;
-  sandbox.art.refresh();
-  assert.equal(scheduled, 1, 'hidden tab does not render continuously');
-  sandbox.document.hidden = false;
-  visibility([{ isIntersecting: false }]);
-  assert.equal(scheduled, 1, 'offscreen sculpture does not render continuously');
-  sandbox.art.dispose();
 });

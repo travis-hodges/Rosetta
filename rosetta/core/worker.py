@@ -16,10 +16,12 @@ from __future__ import annotations
 import logging
 import os
 import select
+import shlex
 import shutil
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from .config import DEFAULT_CONFIG, M_WORKER_SOURCE, CoreConfig
@@ -28,6 +30,38 @@ from .protocol import Request, Response
 log = logging.getLogger("rosetta.core.worker")
 
 _BANNER = "ROSETTA-WORKER"
+
+# The Docker client is not the process executing M code. Verify an unguessable
+# per-spawn token before signalling the remote PID, including after client death.
+_TERMINATE_REMOTE = r'''
+set -e
+marker=$1
+token=$2
+touch "$marker.cancel"
+if [[ ! -f "$marker" ]]; then exit 0; fi
+read -r pid < "$marker"
+if [[ ! "$pid" =~ ^[0-9]+$ || "$pid" -le 1 ]]; then
+  echo "invalid worker PID marker" >&2; exit 1
+fi
+if [[ -d "/proc/$pid" ]]; then
+  matched=0
+  if [[ -r "/proc/$pid/environ" ]]; then
+    while IFS= read -r -d '' item; do
+      if [[ "$item" == "ROSWRK_TOKEN=$token" ]]; then matched=1; fi
+    done < "/proc/$pid/environ"
+  fi
+  if [[ "$matched" == 1 ]]; then
+    kill -KILL "$pid" 2>/dev/null || [[ ! -d "/proc/$pid" ]]
+  elif [[ -d "/proc/$pid" ]]; then
+    # A stale PID may belong to another process. Never signal it.
+    state=$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null || true)
+    if [[ "$state" != Z && ! -r "/proc/$pid/environ" ]]; then
+      echo "cannot verify worker process identity" >&2; exit 1
+    fi
+  fi
+fi
+rm -f "$marker"
+'''
 
 
 class WorkerError(RuntimeError):
@@ -55,6 +89,8 @@ class MWorker:
         self._stderr: list[str] = []
         self._stderr_thread: threading.Thread | None = None
         self.spawn_count = 0
+        self._remote_token: str | None = None
+        self._pid_file: str | None = None
 
     # ------------------------------------------------------------- lifecycle
 
@@ -111,10 +147,19 @@ class MWorker:
 
     def _spawn(self) -> None:
         cfg = self.config
+        self._remote_token = uuid.uuid4().hex
+        self._pid_file = f"{cfg.private_dir}/worker-{self._remote_token}.pid"
+        marker = shlex.quote(self._pid_file)
         cmd = self._docker(
-            "exec", "-i", "-u", cfg.instance, cfg.container,
+            "exec", "-i", "-u", cfg.instance, "-e", f"ROSWRK_TOKEN={self._remote_token}", cfg.container,
+            # Keep the shared lock through both execs and the worker lifetime.
+            # --no-fork preserves the PID recorded below for precise shutdown.
+            "/usr/bin/flock", "--shared", "--nonblock", "--no-fork",
+            "--conflict-exit-code", "75", f"{cfg.scratch_dir}/database.lock",
             "bash", "-c",
-            f"source {cfg.env_file} && cd {cfg.scratch_dir} && "
+            f"printf '%s\\n' \"$$\" > {marker} && "
+            f"[[ ! -e {marker}.cancel ]] && "
+            f"source {shlex.quote(cfg.env_file)} && cd {shlex.quote(cfg.scratch_dir)} && "
             # Prepend this runtime's private (object, source) pair so ZLINK
             # compiles into a directory nothing else writes. The shared dirs
             # stay on the path, read-only, so real VistA routines still resolve.
@@ -123,6 +168,7 @@ class MWorker:
             # name -- exactly what verifying a stream of mutants does.
             f'export gtmroutines="{cfg.private_obj}({cfg.private_src}) $gtmroutines" && '
             f'export ROSWRKOBJD="{cfg.private_obj}" && '
+            f'export ROSWRKTMP="{cfg.scratch_dir}" && '
             f"exec $gtm_dist/mumps -run MAIN^ROSWRK",
         )
         log.debug("spawning worker: %s", " ".join(cmd))
@@ -141,10 +187,17 @@ class MWorker:
         )
         self._stderr_thread.start()
 
-        banner = self._read_line(self.config.startup_timeout_s)
+        try:
+            banner = self._read_line(self.config.startup_timeout_s)
+        except WorkerTimeout:
+            self.kill_now()
+            raise
         if banner is None or not banner.startswith(_BANNER):
-            detail = "\n".join(self._stderr[-20:])
+            proc = self._proc
             self.stop()
+            if proc is not None and proc.returncode == 75:
+                raise WorkerError("database is busy: a snapshot restore holds the exclusive database lock")
+            detail = "\n".join(self._stderr[-20:])
             raise WorkerDied(
                 f"worker did not announce itself (got {banner!r}). stderr:\n{detail}"
             )
@@ -162,6 +215,7 @@ class MWorker:
     def stop(self) -> None:
         proc, self._proc = self._proc, None
         if proc is None:
+            self._terminate_remote()
             return
         try:
             if proc.poll() is None and proc.stdin is not None:
@@ -173,15 +227,43 @@ class MWorker:
             try:
                 proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
+                self._terminate_remote()
+        finally:
+            try:
+                self._terminate_remote()
+            finally:
+                self._close_client(proc)
+
+    def _terminate_remote(self) -> None:
+        if self._pid_file is None or self._remote_token is None:
+            return
+        try:
+            result = subprocess.run(
+                self._docker("exec", "-u", self.config.instance, self.config.container,
+                             "bash", "-c", _TERMINATE_REMOTE, "rosetta-worker-stop",
+                             self._pid_file, self._remote_token),
+                capture_output=True, text=True, timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise WorkerError("could not terminate the in-container worker") from exc
+        if result.returncode != 0:
+            raise WorkerError(f"could not terminate the in-container worker: {result.stderr.strip()}")
+        self._pid_file = None
+        self._remote_token = None
+
+    @staticmethod
+    def _close_client(proc: subprocess.Popen[bytes]) -> None:
+        try:
+            if proc.poll() is None:
                 proc.kill()
-                proc.wait(timeout=5)
+            proc.wait(timeout=5)
         finally:
             for stream in (proc.stdin, proc.stdout, proc.stderr):
-                try:
-                    if stream is not None:
+                if stream is not None:
+                    try:
                         stream.close()
-                except OSError:
-                    pass
+                    except OSError:
+                        pass
 
     def __enter__(self) -> "MWorker":
         self.ensure_started()
@@ -231,22 +313,11 @@ class MWorker:
     def kill_now(self) -> None:
         """Hard-kill. YottaDB rolls back an open TP frame on process death."""
         proc, self._proc = self._proc, None
-        if proc is None:
-            return
         try:
-            proc.kill()
-            proc.wait(timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-        # Close the pipes explicitly. The benchmark kills and respawns workers
-        # thousands of times; leaking a descriptor per cycle exhausts the fd
-        # table long before a run finishes.
-        for stream in (proc.stdin, proc.stdout, proc.stderr):
-            if stream is not None:
-                try:
-                    stream.close()
-                except OSError:
-                    pass
+            self._terminate_remote()
+        finally:
+            if proc is not None:
+                self._close_client(proc)
 
     # ------------------------------------------------------------------- io
 

@@ -1,85 +1,260 @@
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const menuButton = document.querySelector('.menu-toggle');
+// No libraries or network requests: the page remains readable without JavaScript.
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let paused = reducedMotion.matches;
+let storyProgress = 0;
+let activeChapter = 0;
+const motionButton = document.querySelector('#motion-toggle');
+const menuButton = document.querySelector('#menu-toggle');
 const nav = document.querySelector('#site-nav');
+const story = document.querySelector('#workflow');
+const chapters = [...document.querySelectorAll('[data-chapter]')];
+const jumps = [...document.querySelectorAll('[data-jump]')];
+const artControllers = [];
 
-menuButton?.addEventListener('click', () => {
-  const open = menuButton.getAttribute('aria-expanded') !== 'true';
+function syncMotion() {
+  document.documentElement.classList.toggle('motion-paused', paused);
+  motionButton.setAttribute('aria-pressed', String(paused));
+  motionButton.innerHTML = paused ? 'Resume motion <span aria-hidden="true">▷</span>' : 'Pause motion <span aria-hidden="true">Ⅱ</span>';
+  artControllers.forEach(art => art.refresh());
+}
+motionButton.addEventListener('click', () => { paused = !paused; syncMotion(); });
+reducedMotion.addEventListener('change', () => { paused = reducedMotion.matches; syncMotion(); });
+syncMotion();
+function setMenu(open) {
+  nav.classList.toggle('is-open', open);
   menuButton.setAttribute('aria-expanded', String(open));
-  menuButton.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
-  nav?.classList.toggle('is-open', open);
-  document.body.classList.toggle('menu-open', open);
+  menuButton.innerHTML = open ? 'Close <span aria-hidden="true">−</span>' : 'Menu <span aria-hidden="true">+</span>';
+}
+menuButton.addEventListener('click', () => setMenu(menuButton.getAttribute('aria-expanded') !== 'true'));
+nav.querySelectorAll('a').forEach(link => link.addEventListener('click', () => setMenu(false)));
+addEventListener('keydown', event => {
+  if (event.key === 'Escape' && menuButton.getAttribute('aria-expanded') === 'true') { setMenu(false); menuButton.focus(); }
 });
-
-nav?.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => {
-  menuButton?.setAttribute('aria-expanded', 'false');
-  menuButton?.setAttribute('aria-label', 'Open menu');
-  nav.classList.remove('is-open');
-  document.body.classList.remove('menu-open');
+addEventListener('click', event => {
+  if (!document.querySelector('.site-header').contains(event.target)) setMenu(false);
+});
+function setChapter(index) {
+  activeChapter = index;
+  chapters.forEach((chapter, i) => {
+    chapter.classList.toggle('is-active', i === index);
+    chapter.setAttribute('aria-hidden', String(i !== index));
+    chapter.inert = i !== index;
+  });
+  jumps.forEach((button, i) => {
+    if (i === index) button.setAttribute('aria-current', 'step');
+    else button.removeAttribute('aria-current');
+  });
+}
+setChapter(0);
+let scrollQueued = false;
+function updateScroll() {
+  scrollQueued = false;
+  const rect = story.getBoundingClientRect();
+  const travel = Math.max(1, story.offsetHeight - document.querySelector('.story-sticky').offsetHeight);
+  storyProgress = Math.max(0, Math.min(1, -rect.top / travel));
+  const chapter = Math.min(2, Math.floor(storyProgress * 3));
+  if (activeChapter !== chapter) setChapter(chapter);
+  const progress = document.querySelector('.story-progress');
+  progress.style.setProperty('--progress', storyProgress);
+  progress.setAttribute('aria-valuenow', String(Math.round(storyProgress * 100)));
+  document.querySelector('.site-header').classList.toggle('is-dark', rect.top < 70 && rect.bottom > 70);
+  document.documentElement.style.setProperty('--hero-scroll', paused ? 0 : Math.min(1, scrollY / innerHeight));
+}
+addEventListener('scroll', () => {
+  if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(updateScroll); }
+}, { passive: true });
+addEventListener('resize', () => { if (innerWidth > 760) setMenu(false); updateScroll(); });
+jumps.forEach((button, i) => button.addEventListener('click', () => {
+  const top = story.getBoundingClientRect().top + scrollY;
+  const travel = Math.max(1, story.offsetHeight - document.querySelector('.story-sticky').offsetHeight);
+  scrollTo({ top: top + travel * (i / 3 + 0.1), behavior: paused || reducedMotion.matches ? 'instant' : 'smooth' });
 }));
+updateScroll();
 
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && menuButton?.getAttribute('aria-expanded') === 'true') {
-    menuButton.click();
-    menuButton.focus();
-  }
-});
-
-const makeCanvas = (canvas, isHero) => {
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d', { alpha: true });
-  let width = 0; let height = 0; let frame = 0; let raf = 0; let points = [];
-  const resize = () => {
-    const bounds = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    width = bounds.width; height = bounds.height;
-    canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    points = Array.from({ length: isHero ? Math.max(58, Math.floor(width / 18)) : Math.max(38, Math.floor(width / 26)) }, (_, index) => ({
-      x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - .5) * (isHero ? .25 : .1), vy: (Math.random() - .5) * .14, phase: Math.random() * Math.PI * 2, size: index % 11 === 0 ? 3 : 1,
-    }));
-  };
-  const draw = () => {
-    ctx.clearRect(0, 0, width, height);
-    const grid = 52;
-    ctx.strokeStyle = 'rgba(255,255,255,.055)'; ctx.lineWidth = 1;
-    for (let x = 0; x < width; x += grid) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
-    for (let y = 0; y < height; y += grid) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
-    points.forEach((point, index) => {
-      point.x += point.vx + (isHero ? 0 : .12); point.y += point.vy;
-      if (point.x < -15) point.x = width + 15; if (point.x > width + 15) point.x = -15;
-      if (point.y < -15) point.y = height + 15; if (point.y > height + 15) point.y = -15;
-      if (isHero) {
-        for (let next = index + 1; next < points.length; next += 1) {
-          const peer = points[next]; const distance = Math.hypot(point.x - peer.x, point.y - peer.y);
-          if (distance < 120) { ctx.strokeStyle = `rgba(242,255,102,${(1 - distance / 120) * .12})`; ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(peer.x, peer.y); ctx.stroke(); }
-        }
-        const active = Math.sin(frame * .018 + point.phase) > .93;
-        ctx.fillStyle = active ? '#f2ff66' : 'rgba(255,255,255,.4)'; ctx.shadowColor = active ? '#f2ff66' : 'transparent'; ctx.shadowBlur = active ? 15 : 0;
-        ctx.fillRect(point.x - point.size / 2, point.y - point.size / 2, point.size, point.size); ctx.shadowBlur = 0;
-      } else {
-        ctx.fillStyle = `rgba(255,255,255,${.04 + ((Math.sin(frame * .01 + point.phase) + 1) / 2) * .14})`; ctx.font = '11px "Space Mono", monospace';
-        ctx.fillText(['░','▒','▓','0','1','/','→','+'][index % 8], point.x, point.y);
-      }
-    });
-    if (isHero) { const progress = (frame * .7) % (width + 250) - 125; ctx.strokeStyle = 'rgba(242,255,102,.26)'; ctx.beginPath(); ctx.moveTo(progress, height * .43); ctx.lineTo(progress + 160, height * .43); ctx.stroke(); ctx.fillStyle = '#f2ff66'; ctx.fillRect(progress + 160, height * .43 - 4, 8, 8); }
-    frame += 1; if (!reducedMotion) raf = requestAnimationFrame(draw);
-  };
-  resize(); draw(); window.addEventListener('resize', resize);
-  if (reducedMotion) ctx.clearRect(0, 0, width, height);
-  return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+// These outcomes are deliberately authored illustrations, never runtime results.
+const patchButtons = [...document.querySelectorAll('[data-patch]')];
+patchButtons.forEach(button => button.addEventListener('click', () => {
+  const fixed = button.dataset.patch === 'fixed';
+  patchButtons.forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+  const line = document.querySelector('#patch-line');
+  line.textContent = fixed ? ' S ^VISITS(ID)=$G(^VISITS(ID))+1' : ' ; visit counter update removed';
+  line.className = fixed ? 'code-added' : 'code-removed';
+  document.querySelector('#demo-report').innerHTML = `<p><span class="report-key">OUTPUT</span><span class="pass">MATCH</span><span>"RECORDED"</span></p><p><span class="report-key">GLOBAL STATE</span><span class="${fixed ? 'pass' : 'fail'}">${fixed ? 'MATCH' : 'DIVERGED'}</span><span>^VISITS("demo")</span></p><p class="state-detail">${fixed ? 'Expected 4 → observed 4. The write is preserved.' : 'Expected 4 → observed 3. The write disappeared.'}</p><p class="verdict ${fixed ? 'pass' : 'fail'}">${fixed ? '✓ This illustrated case agrees.' : '× Regression found in this example.'}</p>`;
+}));
+const languages = {
+  mumps: { engine: 'MUMPS / YOTTADB', title: 'Start where the code\nmeets the record.', description: 'MUMPS is Rosetta’s first executable language. Inspect routines, evaluate changes, and compare captured global state using YottaDB.', boundary: 'Connect a model of your choice. No trained specialist model weights are bundled today.' },
+  cobol: { engine: 'COBOL / FUTURE RUNTIME', title: 'A longer horizon\nfor business logic.', description: 'COBOL is part of the legacy-code challenge. GAO’s 2025 review identified Treasury systems using COBOL and assembly, with a shrinking pool of maintainers.', boundary: 'A future direction. Rosetta does not currently provide a COBOL execution adapter, benchmark suite, or trained COBOL model.' },
+  jovial: { engine: 'JOVIAL / FUTURE RUNTIME', title: 'Make the unfamiliar\napproachable.', description: 'JOVIAL is part of Rosetta’s long-term language vision. Meaningful support will require a runtime, representative code, and executable evaluation cases.', boundary: 'A future direction. No JOVIAL runtime integration, measured results, or trained JOVIAL model is available today.' },
+  cms: { engine: 'CMS-2 / FUTURE RUNTIME', title: 'More languages.\nThe same standard.', description: 'CMS-2 is another language in the long-term vision. Each new language must earn its place through runtime integration and inspectable evaluation evidence.', boundary: 'A future direction. No CMS-2 runtime integration, measured results, or trained CMS-2 model is available today.' },
 };
+const languageTabs = [...document.querySelectorAll('[data-language]')];
+function selectLanguage(button, focus = false) {
+  const name = button.dataset.language;
+  const language = languages[name];
+  languageTabs.forEach(tab => {
+    tab.setAttribute('aria-selected', String(tab === button));
+    tab.tabIndex = tab === button ? 0 : -1;
+  });
+  document.querySelector('#language-panel').setAttribute('aria-labelledby', button.id);
+  const status = document.querySelector('#language-status');
+  status.textContent = name === 'mumps' ? 'RUNTIME IMPLEMENTED' : 'FUTURE DIRECTION';
+  status.classList.toggle('future', name !== 'mumps');
+  document.querySelector('#language-engine').textContent = language.engine;
+  document.querySelector('#language-title').textContent = language.title;
+  document.querySelector('#language-description').textContent = language.description;
+  document.querySelector('#language-boundary').textContent = language.boundary;
+  document.querySelector('#corpus-note').hidden = name !== 'mumps';
+  if (focus) button.focus();
+}
+languageTabs.forEach((button, i) => {
+  button.addEventListener('click', () => selectLanguage(button));
+  button.addEventListener('keydown', event => {
+    let next;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (i + 1) % languageTabs.length;
+    if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') next = (i - 1 + languageTabs.length) % languageTabs.length;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = languageTabs.length - 1;
+    if (next !== undefined) { event.preventDefault(); selectLanguage(languageTabs[next], true); }
+  });
+});
+const tabOrientation = matchMedia('(max-width: 760px)');
+function syncTabOrientation() { document.querySelector('.language-tabs').setAttribute('aria-orientation', tabOrientation.matches ? 'horizontal' : 'vertical'); }
+tabOrientation.addEventListener('change', syncTabOrientation);
+syncTabOrientation();
+let copyTimer;
+document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
+  const status = document.querySelector('#copy-status');
+  try {
+    await navigator.clipboard.writeText(button.dataset.copy);
+    document.querySelectorAll('[data-copy]').forEach(item => { item.textContent = 'Copy'; });
+    button.textContent = 'Copied';
+    status.textContent = `Copied: ${button.dataset.copy}`;
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => { button.textContent = 'Copy'; status.textContent = ''; }, 4500);
+  } catch {
+    status.textContent = 'Clipboard unavailable. Select and copy the command above.';
+    const range = document.createRange();
+    range.selectNodeContents(button.parentElement.querySelector('code'));
+    const selection = getSelection();
+    selection.removeAllRanges(); selection.addRange(range);
+  }
+}));
+if ('IntersectionObserver' in window) {
+  const reveals = new IntersectionObserver(entries => entries.forEach(entry => {
+    if (entry.isIntersecting) { entry.target.classList.add('is-visible'); reveals.unobserve(entry.target); }
+  }), { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(element => reveals.observe(element));
+  document.documentElement.classList.add('js-ready');
+}
 
-makeCanvas(document.querySelector('#hero-canvas'), true);
-makeCanvas(document.querySelector('#stream-canvas'), false);
-
-const glyphRain = document.querySelector('#glyph-rain');
-if (glyphRain) { const chars = ['░','▒','▓','0','1','/','\\','→','←','+','▌','▐']; glyphRain.textContent = Array.from({ length: 2200 }, (_, index) => index % 84 === 0 ? '\n' : chars[Math.floor(Math.random() * chars.length)]).join(' '); }
-
-const eventCopy = document.querySelector('#event-copy'); const statusCopy = document.querySelector('.status-copy');
-const events = [['snapshot.baseline → ready', '"CAPTURED"'], ['runtime.execute → reference', '"RUNNING"'], ['globals.diff → divergence', '"FOUND"'], ['state.restore → clean', '"VERIFIED"']]; let eventIndex = 0;
-if (!reducedMotion) setInterval(() => { eventIndex = (eventIndex + 1) % events.length; if (eventCopy) eventCopy.textContent = events[eventIndex][0]; if (statusCopy) statusCopy.textContent = events[eventIndex][1]; }, 1900);
-
-const proofSection = document.querySelector('.workflow-section'); const proofLeft = document.querySelector('.proof-left'); const proofRight = document.querySelector('.proof-right');
-const updateProof = () => { if (!proofSection || !proofLeft || !proofRight || reducedMotion) return; const bounds = proofSection.getBoundingClientRect(); const progress = Math.max(0, Math.min(1, (window.innerHeight - bounds.top) / (window.innerHeight + bounds.height))); const offset = (progress - .5) * 150; proofLeft.style.transform = `translateX(${offset - 86}px)`; proofRight.style.transform = `translateX(${-offset + 86}px)`; };
-window.addEventListener('scroll', updateProof, { passive: true }); updateProof();
-const year = document.querySelector('#year'); if (year) year.textContent = new Date().getFullYear();
+// A sliced, metallic sphere projected into Canvas 2D. Each latitude is a solid
+// thin disc: metallic gradients give volume without a WebGL/Three dependency.
+function createSculpture(canvas, dark) {
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  let width = 0, height = 0, visible = false, frame = 0, lastTime = 0, phase = 0;
+  let mouseX = 0, mouseY = 0;
+  const surface = canvas.parentElement;
+  function draw() {
+    if (!width || !height) return;
+    context.clearRect(0, 0, width, height);
+    const progress = dark ? storyProgress : 0;
+    const spread = dark ? Math.sin(progress * Math.PI) * 0.7 : 0;
+    const radius = Math.min(width * .33, height * .345);
+    const tilt = -0.34 + (dark ? progress * .68 : 0) + (paused ? 0 : mouseX * .035);
+    context.save();
+    context.translate(width * .5, height * .5 + (paused ? 0 : Math.sin(phase * .6) * 5));
+    context.rotate(tilt);
+    // Quiet orbit around the sculpture.
+    context.strokeStyle = dark ? '#c1c9a22b' : '#74805a38';
+    context.lineWidth = .7;
+    context.beginPath();
+    context.ellipse(0, 0, radius * 1.22, radius * .94, .6 + progress, 0, Math.PI * 2);
+    context.stroke();
+    const count = 66;
+    const pitch = .27 + Math.sin(phase * .18) * .08 + (paused ? 0 : mouseY * .025);
+    for (let i = 0; i < count; i++) {
+      const latitude = (i / (count - 1) * 2 - 1) * .985;
+      const y = latitude * radius * (1 + spread);
+      const r = Math.sqrt(1 - latitude * latitude) * radius;
+      const thickness = radius / count * .74;
+      const offset = Math.sin(i * .13 + progress * 4) * spread * radius * .16;
+      context.save();
+      context.translate(offset, y);
+      const metal = context.createLinearGradient(-r, -r * pitch, r, r * pitch);
+      const shine = .47 + Math.sin(phase * .24 + i * .022) * .1;
+      metal.addColorStop(0, dark ? '#4e5748' : '#3a4134');
+      metal.addColorStop(.16, '#c7cdbb');
+      metal.addColorStop(.31, '#626c58');
+      metal.addColorStop(shine, '#f0f2e4');
+      metal.addColorStop(.68, '#727c61');
+      metal.addColorStop(.83, '#b4bca4');
+      metal.addColorStop(1, '#333e2b');
+      context.fillStyle = metal;
+      context.beginPath();
+      context.ellipse(0, 0, r, Math.max(.5, r * pitch), 0, 0, Math.PI * 2);
+      context.fill();
+      // A narrow dark edge separates the stacked discs.
+      context.strokeStyle = i % 9 === 0 ? '#242c20' : (dark ? '#10160ac4' : '#30392ab8');
+      context.lineWidth = Math.max(.7, thickness * .38);
+      context.beginPath();
+      context.ellipse(0, thickness, r, Math.max(.5, r * pitch), 0, 0, Math.PI);
+      context.stroke();
+      context.restore();
+    }
+    // Re-establish the front edges after stacking the discs, so the sphere
+    // reads as separate metallic slices all the way across its face.
+    for (let i = 1; i < count - 1; i++) {
+      const latitude = (i / (count - 1) * 2 - 1) * .985;
+      const r = Math.sqrt(1 - latitude * latitude) * radius;
+      const y = latitude * radius * (1 + spread);
+      const offset = Math.sin(i * .13 + progress * 4) * spread * radius * .16;
+      context.strokeStyle = dark ? '#131b0ea6' : '#34402bab';
+      context.lineWidth = Math.max(.7, radius / count * .3);
+      context.beginPath();
+      context.ellipse(offset, y, r, Math.max(.5, r * pitch), 0, .09, Math.PI - .09);
+      context.stroke();
+    }
+    if (spread > .15) {
+      context.globalAlpha = Math.min(.9, spread);
+      const core = context.createRadialGradient(-5, -5, 0, 0, 0, radius * .12);
+      core.addColorStop(0, '#efffb1'); core.addColorStop(1, '#aec739');
+      context.fillStyle = core; context.beginPath(); context.arc(0, 0, radius * .11, 0, Math.PI * 2); context.fill();
+    }
+    context.restore();
+  }
+  function tick(time) {
+    frame = 0;
+    if (!visible || document.hidden || paused) { lastTime = 0; return; }
+    if (!lastTime || time - lastTime >= 30) {
+      phase += lastTime ? Math.min((time - lastTime) / 1000, .05) : 0;
+      lastTime = time; draw();
+    }
+    frame = requestAnimationFrame(tick);
+  }
+  function refresh() {
+    cancelAnimationFrame(frame); frame = 0; lastTime = 0;
+    if (visible && !document.hidden) { draw(); if (!paused) frame = requestAnimationFrame(tick); }
+  }
+  const resize = new ResizeObserver(() => {
+    const rect = surface.getBoundingClientRect();
+    width = rect.width; height = rect.height;
+    const dpr = Math.min(devicePixelRatio || 1, 1.75);
+    canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  });
+  resize.observe(surface);
+  const observer = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; refresh(); }, { rootMargin: '80px' });
+  observer.observe(surface);
+  const pointer = event => { if (!paused) { mouseX = event.clientX / innerWidth - .5; mouseY = event.clientY / innerHeight - .5; } };
+  addEventListener('pointermove', pointer, { passive: true });
+  document.addEventListener('visibilitychange', refresh);
+  surface.classList.add('art-ready');
+  return { refresh, dispose() { cancelAnimationFrame(frame); resize.disconnect(); observer.disconnect(); removeEventListener('pointermove', pointer); document.removeEventListener('visibilitychange', refresh); } };
+}
+for (const [id, dark] of [['hero-canvas', false], ['story-canvas', true]]) {
+  const art = createSculpture(document.getElementById(id), dark);
+  if (art) artControllers.push(art);
+}
+addEventListener('pagehide', event => { if (!event.persisted) artControllers.forEach(art => art.dispose()); });

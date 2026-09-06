@@ -64,7 +64,14 @@ fi
 
 # ------------------------------------------------------------ container lifecycle
 
-container_state() { docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null || echo "absent"; }
+container_state() {
+  local discovered_state
+  if discovered_state="$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null)"; then
+    printf '%s\n' "$discovered_state"
+  else
+    printf '%s\n' absent
+  fi
+}
 
 if [ "$RECREATE" = 1 ]; then
   say "Removing existing $CONTAINER (--recreate)"
@@ -189,6 +196,26 @@ echo "$UEI_OUT" | grep -q 'UEI=1' || die "smoke test failed: \$\$VALIDUEI^PRCHUE
 $UEI_OUT"
 echo "$UEI_OUT" | grep -q 'CRC=907060870' || warn "\$\$CRC32^XLFCRC(\"hello\") != 907060870 (expected per PROJECT.md)"
 say "Smoke test passed"
+
+# Pure routines do not open the database. A cold image can take much longer
+# on its first region attachment (especially under emulation), so warm and
+# verify a real rollback before the worker's short request timeout applies.
+say "Checking database writes and rollback (cold start may take a few minutes)"
+if ! DB_OUT="$(docker exec -i -u "$INSTANCE" "$CONTAINER" bash -c \
+  "source ${BASEDIR}/etc/env && timeout -s KILL 180 \$gtm_dist/mumps -direct" <<'DBPROBE'
+TSTART *:SERIAL
+S ^ROSTMP("bootstrap",$J)=1
+W "DBWRITE=",$G(^ROSTMP("bootstrap",$J)),!
+TROLLBACK
+W "DBRESTORED=",$D(^ROSTMP("bootstrap",$J)),!
+H
+DBPROBE
+)"; then
+  die "database write/rollback check failed or exceeded 180 seconds"
+fi
+echo "$DB_OUT" | grep -q 'DBWRITE=1' || die "database write check failed: $DB_OUT"
+echo "$DB_OUT" | grep -q 'DBRESTORED=0' || die "database rollback check failed: $DB_OUT"
+say "Database write and rollback passed"
 
 # ------------------------------------------------- optional restart measurement
 

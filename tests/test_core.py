@@ -11,7 +11,7 @@ is the whole project.
 
     scripts/bootstrap.sh && python -m unittest tests.test_core -v
 
-Set ROSETTA_SLOW_TESTS=1 to include the ~45s snapshot/restore round trip.
+Set ROSETTA_SLOW_TESTS=1 to include the full database snapshot/restore round trip.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from rosetta.core import (
     plan_capture,
     reject_if_unsafe,
 )
-from rosetta.core.config import DEFAULT_CONFIG, KILLED
+from rosetta.core.config import CoreConfig, DEFAULT_CONFIG, KILLED
 from rosetta.core.protocol import Request, Response, escape, unescape
 from rosetta.core.selftest import (
     PXVSC_MUTATION,
@@ -123,7 +123,12 @@ class TestTPRejection(unittest.TestCase):
             "GO ;\n TS ():SERIAL\n Q\n",
             "GO ;\n TC\n Q\n",
             "GO ;\n . TCOMMIT\n",
+            "GO ;\n D\n .TCOMMIT\n",
+            "GO ;\n D\n .TC\n",
             "GO ;\n I 1 D\n . . TROLLBACK\n",
+            "GO ;\n S X=1 TCOMMIT\n",
+            "GO ;\n I X TROLLBACK\n",
+            "GO ;\n D  TC\n",
         ]:
             with self.subTest(body=body.strip()):
                 with self.assertRaises(RoutineRejected):
@@ -178,6 +183,10 @@ class TestExtrinsicDetection(unittest.TestCase):
 
 
 class TestCapturePlanning(unittest.TestCase):
+    def test_global_depth_ignores_function_arguments_and_string_commas(self) -> None:
+        facts = parse("ROSDEP", 'ROSDEP\n S ^ROSSCR("a,b",$P("x,y",",",1),3)=1\n Q\n')
+        self.assertEqual(facts.max_global_depth, 3)
+
     def test_pure_routine_needs_no_capture(self) -> None:
         plan = plan_capture(parse("PRCHUEI", read_routine("PRCHUEI")))
         self.assertEqual(plan.tier, CaptureTier.NONE)
@@ -371,6 +380,14 @@ class TestLiveRuntime(unittest.TestCase):
         self.assertEqual(r.stdout, "line1\nline2")
         self.assertIsNone(r.error)
 
+    def test_zwrite_output_is_part_of_the_verdict(self) -> None:
+        baseline = 'ROSZOUT\nGO\n N X S X=1\n ZWRITE X\n Q\n'
+        candidate = baseline.replace("X=1", "X=2")
+        report = self.rt.verify_equivalence("ROSZOUT", baseline, candidate, [ExecSpec("ROSZOUT", "GO")])
+        self.assertFalse(report.equivalent)
+        self.assertEqual(report.n_void, 0)
+        self.assertTrue(any(d.kind == "output" for d in report.divergences))
+
     def test_globals_are_rolled_back(self) -> None:
         self.rt.load_routine(
             "ROSTWR", 'ROSTWR ;\nGO ;\n S ^ROSSCR("k")="v",^ROSSCR("k",1)=1\n Q\n'
@@ -423,6 +440,30 @@ class TestLiveRuntime(unittest.TestCase):
         nasty = "a%b=c\td\ne\rf^g\"h"
         r = self.rt.execute(ExecSpec(routine="ROSTESC", entry="GO", args=[nasty]))
         self.assertEqual(r.globals_out.get('^ROSSCR("e")'), nasty)
+
+    def test_trigger_cleanup_preserves_another_runtimes_triggers(self) -> None:
+        from rosetta.core import CapturePlan
+        with Runtime() as other:
+            plan = CapturePlan(tier=CaptureTier.TRIGGER, trigger_roots=("^ROSSCR",))
+            self.rt._sync_triggers(plan)
+            other._sync_triggers(plan)
+            try:
+                other.clear_triggers()
+                # This worker's trigger must still execute after the other
+                # owner closes. Seeded watches make the log independent of
+                # any pre-existing application data.
+                source = 'ROSTOWN ;\nGO ;\n S ^ROSSCR("owner")="kept"\n Q\n'
+                self.rt.load_routine("ROSTOWN", source)
+                loaded = self.rt._loaded["ROSTOWN"]
+                from dataclasses import replace
+                self.rt._loaded["ROSTOWN"] = replace(loaded, plan=plan)
+                self.rt._sync_triggers(plan)
+                other.clear_triggers()
+                result = self.rt.execute(ExecSpec("ROSTOWN", "GO"))
+                self.assertEqual(result.globals_out.get('^ROSSCR("owner")'), "kept")
+                self.assertFalse(result.void)
+            finally:
+                self.rt.clear_triggers()
 
     # -- failure modes -------------------------------------------------------
 
@@ -477,25 +518,89 @@ class TestLiveRuntime(unittest.TestCase):
         ).strip()
         self.assertEqual(residue, "0", "process death did not roll the frame back")
 
-    def test_void_cases_are_counted_and_never_scored(self) -> None:
-        """A candidate can void the frame without naming a TP command itself.
-
-        load_routine() only scans the source it is handed, so a clean-looking
-        candidate that CALLS a routine containing TCOMMIT passes the static
-        guard and must still be caught by the runtime $TLEVEL assertion. That
-        is the realistic shape of this failure, and the one verify_equivalence
-        has to count as void rather than score.
-        """
+    def test_transaction_commands_in_callees_are_rejected(self) -> None:
         self._install_out_of_band("ROSTROG2", "ROSTROG2 ;\nGO ;\n TCOMMIT\n Q\n")
         source = "ROSTVOID ;\nGO ;\n D GO^ROSTROG2\n Q\n"
-        self.rt.load_routine("ROSTVOID", source)  # passes the static guard
+        with self.assertRaises(RoutineRejected):
+            self.rt.load_routine("ROSTVOID", source)
+
+    def test_void_cases_are_counted_and_never_scored(self) -> None:
+        source = "ROSTVOID ;\nGO ;\n H\n"
         report = self.rt.verify_equivalence(
             "ROSTVOID", source, source,
             [ExecSpec(routine="ROSTVOID", entry="GO")],
         )
         self.assertEqual(report.n_void, 1)
         self.assertEqual(report.n_diverged, 0)
-        self.assertEqual(report.divergences, [])
+        self.assertFalse(report.equivalent)
+
+    def test_callee_global_writes_are_part_of_the_verdict(self) -> None:
+        self.rt.load_routine("ROSTCAL", 'ROSTCAL ;\nGO(X) ;\n S ^ROSSCR("callee")=X\n Q\n')
+        baseline = "ROSTPAR ;\nGO ;\n D GO^ROSTCAL(1)\n Q\n"
+        candidate = baseline.replace("ROSTCAL(1)", "ROSTCAL(2)")
+        report = self.rt.verify_equivalence("ROSTPAR", baseline, candidate, [ExecSpec("ROSTPAR", "GO")])
+        self.assertFalse(report.equivalent)
+        self.assertEqual(report.n_void, 0)
+        self.assertTrue(any(d.kind == "global" and "callee" in d.ref for d in report.divergences))
+
+    def test_unbounded_indirect_write_cannot_certify_equivalence(self) -> None:
+        baseline = "ROSTIND ;\nGO(R) ;\n S @R=1\n Q\n"
+        candidate = baseline.replace("@R=1", "@R=2")
+        with self.assertRaises(RoutineRejected):
+            self.rt.verify_equivalence(
+                "ROSTIND", baseline, candidate,
+                [ExecSpec(routine="ROSTIND", entry="GO", args=['^ROSSCR("indirect")'])],
+            )
+
+    def test_truncated_global_capture_cannot_certify_equivalence(self) -> None:
+        baseline = (
+            "ROSTCAP ;\nGO ;\n"
+            " S ^ROSSCR(1)=1,^ROSSCR(2)=2,^ROSSCR(3)=3\n Q\n"
+        )
+        candidate = baseline.replace("(3)=3", "(3)=4")
+        with Runtime(CoreConfig(max_nodes_per_root=1)) as rt:
+            report = rt.verify_equivalence(
+                "ROSTCAP", baseline, candidate,
+                [ExecSpec(routine="ROSTCAP", entry="GO")],
+            )
+            self.assertFalse(report.equivalent)
+            self.assertEqual(report.n_void, 1)
+
+    def test_candidate_compile_failure_restores_loaded_baseline(self) -> None:
+        baseline = "ROSTREST ;\nGO() ;\n Q 7\n"
+        with self.assertRaises(RuntimeError):
+            self.rt.verify_equivalence(
+                "ROSTREST", baseline, "ROSTREST ;\nGO ;\n SSSS (((\n",
+                [ExecSpec(routine="ROSTREST", entry="$$GO")],
+            )
+        result = self.rt.execute(ExecSpec(routine="ROSTREST", entry="$$GO"))
+        self.assertIsNone(result.error)
+        self.assertFalse(result.void)
+        self.assertEqual(result.stdout, "7")
+
+    def test_trigger_plan_rejects_uncaptured_subtrees_and_deep_writes(self) -> None:
+        with Runtime(CoreConfig(query_tier_node_cap=-1)) as rt:
+            for body in (
+                'M ^ROSSCR=^ROSCOPY',
+                'S ^ROSSCR(1,2,3,4,5,6,7,8,9)=1',
+            ):
+                with self.subTest(body=body), self.assertRaises(RoutineRejected):
+                    rt.load_routine("ROSDEP", "ROSDEP\nGO\n " + body + "\n Q\n")
+
+    def test_trigger_subtree_deletion_voids_the_comparison(self) -> None:
+        source = 'ROSDEL\nGO\n S ^ROSSCR(1,2)=1\n K ^ROSSCR\n Q\n'
+        with Runtime(CoreConfig(query_tier_node_cap=-1)) as rt:
+            report = rt.verify_equivalence("ROSDEL", source, source, [ExecSpec("ROSDEL", "GO")])
+            self.assertFalse(report.equivalent)
+            self.assertEqual(report.n_void, 1)
+
+    def test_trigger_leaf_deletion_observes_final_state(self) -> None:
+        source = 'ROSDEL\nGO\n S ^ROSSCR(1)=1\n K ^ROSSCR(1)\n Q\n'
+        with Runtime(CoreConfig(query_tier_node_cap=-1)) as rt:
+            rt.load_routine("ROSDEL", source)
+            result = rt.execute(ExecSpec("ROSDEL", "GO"))
+            self.assertFalse(result.void)
+            self.assertEqual(result.globals_out['^ROSSCR(1)'], KILLED)
 
     # -- cross-process isolation ---------------------------------------------
 
@@ -515,13 +620,13 @@ class TestLiveRuntime(unittest.TestCase):
         baseline = 'ROSISO ;\nGO ;\n W "base",!\n Q\n'
 
         def verify(tag: str) -> tuple[str, list[str]]:
-            rt = Runtime()
-            candidate = f'ROSISO ;\nGO ;\n W "{tag}",!\n Q\n'
-            report = rt.verify_equivalence(
-                "ROSISO", baseline, candidate,
-                [ExecSpec(routine="ROSISO", entry="GO")],
-            )
-            return tag, [d.actual for d in report.divergences]
+            with Runtime() as rt:
+                candidate = f'ROSISO ;\nGO ;\n W "{tag}",!\n Q\n'
+                report = rt.verify_equivalence(
+                    "ROSISO", baseline, candidate,
+                    [ExecSpec(routine="ROSISO", entry="GO")],
+                )
+                return tag, [d.actual for d in report.divergences]
 
         tags = ["AAA", "BBB", "CCC", "DDD"]
         with cf.ThreadPoolExecutor(max_workers=len(tags)) as pool:
@@ -567,17 +672,34 @@ class TestLiveRuntime(unittest.TestCase):
             self.assertTrue(path.endswith(".dat"), path)
 
     @unittest.skipUnless(os.environ.get("ROSETTA_SLOW_TESTS"),
-                         "set ROSETTA_SLOW_TESTS=1 (~45s .dat round trip)")
+                         "set ROSETTA_SLOW_TESTS=1 (full database copy/restore)")
     def test_snapshot_and_restore_round_trip(self) -> None:
         snap = self.rt.snapshot()
         self.assertTrue(snap.startswith("snap-"))
+        # A read-only routine can pass even if region restoration is broken.
+        # Commit an owned probe after the snapshot and prove restore removes it.
+        probe = "snapshot-" + self.rt.config.session
+        self.rt._sh(
+            f'source {self.rt.config.env_file} && $gtm_dist/mumps -run %XCMD '
+            f"'S ^ROSTMP(\"{probe}\")=1'"
+        )
         self.rt.restore(snap)
         self.assertTrue(self.rt.ping())
+        residue = self.rt._sh(
+            f'source {self.rt.config.env_file} && $gtm_dist/mumps -run %XCMD '
+            f"'W $D(^ROSTMP(\"{probe}\"))'"
+        ).strip()
+        self.assertEqual(residue, "0", "snapshot restoration did not restore database state")
         self.rt.load_routine("PRCHUEI", read_routine("PRCHUEI"))
         r = self.rt.execute(
             ExecSpec(routine="PRCHUEI", entry="$$VALIDUEI", args=["ZQGGH7C1MJM3"])
         )
         self.assertEqual(r.stdout, "1")
+
+    def test_database_maintenance_refuses_an_active_worker(self) -> None:
+        with self.assertRaises(WorkerError):
+            self.rt._database_maintenance('printf "must-not-run"')
+        self.assertTrue(self.rt.ping(), "maintenance interrupted an active worker")
 
     # -- helper --------------------------------------------------------------
 

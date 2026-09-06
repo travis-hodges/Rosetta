@@ -17,7 +17,7 @@ Deviations from a naive reading of the contract, all deliberate:
   output duplicating across a silent restart -- is handled by truncating at
   every OPEN and by discarding any case with ``restarts > 0``.
 * ``globals_out`` mixes two tiers. A scoped ``$QUERY`` walk reports final state;
-  the ``$ZTRIGGER`` tier reports the last write to each ref, with a KILLed ref
+  the ``$ZTRIGGER`` tier reports final values at touched refs, with a KILLed ref
   reported as the sentinel ``rosetta.core.config.KILLED``. Both versions of a
   routine go through the identical tier, so a diff stays meaningful.
 """
@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -82,7 +84,8 @@ def _summary(self: VerifyReport) -> str:
     if self.equivalent:
         return f"equivalent over {self.n_cases} case(s)"
     parts = [
-        f"NOT equivalent: {self.n_diverged}/{self.n_cases} case(s) diverged",
+        ("INCONCLUSIVE" if self.n_void else "NOT equivalent")
+        + f": {self.n_diverged}/{self.n_cases} case(s) diverged",
     ]
     if self.n_void:
         parts.append(f"{self.n_void} void")
@@ -124,6 +127,7 @@ class Runtime:
         self.worker = MWorker(self.config)
         self._loaded: dict[str, LoadedRoutine] = {}
         self._installed_trigger_roots: tuple[str, ...] = ()
+        self._trigger_prefix = "Ros" + uuid.uuid4().hex[:16]
         self._node_counts: dict[str, int] = {}
         #: Roots whose write capture is known to be incomplete. Not part of the
         #: frozen contract, but the caller must be able to see it.
@@ -210,45 +214,78 @@ class Runtime:
 
     # -------------------------------------------------------- snapshot/restore
 
+    def _database_maintenance(self, command: str) -> str:
+        """Run maintenance exclusively; never replace an attached database."""
+        cfg = self.config
+        script = (
+            "set -e; "
+            'if pgrep -u "$(id -u)" -x mumps >/dev/null; then '
+            'echo "database maintenance requires all M workers to stop" >&2; exit 1; fi; '
+            f"source {shlex.quote(cfg.env_file)}; "
+            '"$gtm_dist/mupip" rundown -region "*"; ' + command
+        )
+        return self._sh(
+            f"flock --exclusive --nonblock {shlex.quote(cfg.scratch_dir + '/database.lock')} "
+            f"bash -c {shlex.quote(script)}"
+        )
+
     def snapshot(self) -> str:
-        """Copy the region .dat files. ~20s against a 3.4GB region."""
+        """Create a ready-to-run MUPIP backup with independent journal state."""
         snap_id = f"snap-{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
         dest = f"{self.config.snapshot_dir}/{snap_id}"
         regions = self.regions()
         if not regions:
             raise WorkerError("no regions discovered; run scripts/bootstrap.sh")
+        self.clear_triggers()
+        self.worker.stop()
         started = time.monotonic()
-        self._sh(f"mkdir -p {dest}")
-        for _region, path in regions:
-            self._sh(f"cp -p {path} {dest}/")
-        log.info(
-            "snapshot %s captured %d region(s) in %.1fs",
-            snap_id, len(regions), time.monotonic() - started,
-        )
+        try:
+            self._database_maintenance(
+                f"mkdir -p {shlex.quote(dest)}; "
+                '"$gtm_dist/mupip" backup -database -noonline -bkupdbjnl=disable '
+                f"-nonewjnlfiles '*' {shlex.quote(dest + '/')}; "
+                f"touch {shlex.quote(dest + '/.complete')}"
+            )
+        finally:
+            self.worker.ensure_started()
+        log.info("snapshot %s captured %d regions in %.1fs",
+                 snap_id, len(regions), time.monotonic() - started)
         return snap_id
 
     def restore(self, snap_id: str) -> None:
-        """Restore regions captured by snapshot(). Same ~20s cost.
-
-        The worker is stopped first: YottaDB will not tolerate the .dat file
-        under an attached process being replaced, and a restore only happens
-        after a voided frame or a TRANS2BIG, when the worker is suspect anyway.
-        """
+        """Restore a completed snapshot with exclusive database access."""
+        if not re.fullmatch(r"snap-[0-9]{8}T[0-9]{6}-[a-f0-9]{8}", snap_id):
+            raise ValueError("invalid snapshot identifier")
         src = f"{self.config.snapshot_dir}/{snap_id}"
-        probe = subprocess.run(
-            [self.config.docker, "exec", self.config.container, "test", "-d", src],
-            capture_output=True,
-        )
-        if probe.returncode != 0:
-            raise WorkerError(f"no such snapshot: {snap_id}")
+        regions = self.regions()
+        if not regions:
+            raise WorkerError("no regions discovered")
+        # Validate the complete snapshot before stopping or changing anything.
+        self._sh(" && ".join(
+            [f"test -f {shlex.quote(src + '/.complete')}"]
+            + [f"test -s {shlex.quote(src + '/' + os.path.basename(path))}"
+               for _, path in regions]
+        ))
         self.worker.stop()
-        started = time.monotonic()
-        for _region, path in self.regions():
-            name = os.path.basename(path)
-            self._sh(f"test -f {src}/{name} && cp -p {src}/{name} {path}")
+        # A failed restore must never leave executable cached routine plans.
         self._loaded.clear()
+        self._node_counts.clear()
         self._installed_trigger_roots = ()
+        started = time.monotonic()
+        commands = []
+        staged = []
+        for _, path in regions:
+            temporary = path + ".restore-" + uuid.uuid4().hex[:8]
+            staged.append((temporary, path))
+            commands.append(
+                f"cp --reflink=auto -p {shlex.quote(src + '/' + os.path.basename(path))} "
+                f"{shlex.quote(temporary)}"
+            )
+        commands.extend(f"mv -f {shlex.quote(temporary)} {shlex.quote(path)}"
+                        for temporary, path in staged)
+        self._database_maintenance("; ".join(commands))
         self.worker.ensure_started()
+        self._reset("after snapshot restore")
         log.info("restored %s in %.1fs", snap_id, time.monotonic() - started)
 
     def regions(self) -> list[tuple[str, str]]:
@@ -288,6 +325,56 @@ class Runtime:
 
     # -------------------------------------------------------------- routines
 
+    def _capture_facts(self, facts: RoutineFacts) -> RoutineFacts:
+        """Include statically reachable callees in the observable write set.
+
+        A missing or dynamically addressed callee cannot support a trustworthy
+        verdict. Refuse it rather than silently inspecting only the caller.
+        """
+        from .source_io import container_files
+
+        seen = {facts.name}
+        pending = list(facts.facts.get("calls", []))
+        writes = set(facts.globals_written)
+        emits_output = facts.writes_device
+        capture_depth = facts.max_global_depth
+        has_merge = facts.facts.get("commands", {}).get("MERGE", 0)
+        while pending:
+            name = pending.pop()
+            if name in seen:
+                continue
+            if len(seen) >= 64:
+                raise RoutineRejected("call graph exceeds the 64-routine capture limit")
+            seen.add(name)
+            if name in self._loaded:
+                child = self._loaded[name].facts
+            else:
+                filename = ("_" + name[1:] if name.startswith("%") else name) + ".m"
+                try:
+                    source = container_files(
+                        self.config.container,
+                        ["cat", f"{self.config.routine_dir}/{filename}"],
+                    )
+                except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+                    raise RoutineRejected(f"cannot inspect callee {name}: {exc}") from exc
+                child = parse(name, source)
+            reject_if_unsafe(name, child.source)
+            if not child.write_set_is_bounded:
+                raise RoutineRejected(f"callee {name} has an unbounded write set")
+            writes.update(child.globals_written)
+            capture_depth = max(capture_depth, child.max_global_depth)
+            has_merge = has_merge or child.facts.get("commands", {}).get("MERGE", 0)
+            emits_output = emits_output or child.writes_device
+            pending.extend(child.facts.get("calls", []))
+        merged = dict(facts.facts)
+        merged["globals_written"] = sorted(writes)
+        merged["commands"] = dict(merged.get("commands", {}))
+        merged["capture_global_depth"] = capture_depth
+        merged["capture_has_merge"] = bool(has_merge)
+        if emits_output:
+            merged["commands"]["WRITE"] = max(1, merged["commands"].get("WRITE", 0))
+        return replace(facts, facts=merged)
+
     def load_routine(self, name: str, source: str) -> None:
         """Write source into the environment and compile it.
 
@@ -302,7 +389,27 @@ class Runtime:
         # load_routine is reachable before the first execute().
         self.worker.ensure_started()
 
-        facts = parse(name, source)
+        facts = self._capture_facts(parse(name, source))
+        plan = plan_capture(
+            facts,
+            node_counts=self._measure_roots(facts),
+            query_tier_node_cap=self.config.query_tier_node_cap,
+        )
+        if plan.trigger_roots and (
+            facts.max_global_depth > self.config.trigger_depth
+            or facts.facts.get("capture_has_merge")
+        ):
+            raise RoutineRejected(
+                f"{name}: trigger capture cannot certify this write set "
+                f"(depth limit {self.config.trigger_depth}); "
+                "MERGE or deeper references require a query capture plan"
+            )
+        if not plan.complete:
+            msg = f"{name}: {plan.reason}"
+            if msg not in self.incomplete_capture:
+                self.incomplete_capture.append(msg)
+            raise RoutineRejected(f"cannot verify incomplete globals_out capture -- {msg}")
+        self._loaded.pop(name, None)
         with tempfile.TemporaryDirectory() as tmp:
             local = Path(tmp) / f"{name}.m"
             local.write_text(source, encoding="utf-8")
@@ -317,16 +424,6 @@ class Runtime:
                 f"compile/link failed for {name}: {resp.get('ERROR') or resp.get('ZSTATUS')}"
             )
 
-        plan = plan_capture(
-            facts,
-            node_counts=self._measure_roots(facts),
-            query_tier_node_cap=self.config.query_tier_node_cap,
-        )
-        if not plan.complete:
-            msg = f"{name}: {plan.reason}"
-            log.warning("incomplete globals_out capture -- %s", msg)
-            if msg not in self.incomplete_capture:
-                self.incomplete_capture.append(msg)
         self._loaded[name] = LoadedRoutine(name, source, facts, plan)
         self._sync_triggers(plan)
 
@@ -368,7 +465,8 @@ class Runtime:
             return
         # $ZTRIGGER inside TP silently no-ops; install before any TSTART.
         req = (Request().add("CMD", "TRIG").add("MODE", "INSTALL")
-               .add("DEPTH", self.config.trigger_depth))
+               .add("DEPTH", self.config.trigger_depth)
+               .add("PREFIX", self._trigger_prefix))
         for root in wanted:
             req.add("ROOT", root)
         resp = self.worker.send(req, timeout_s=60.0)
@@ -383,8 +481,12 @@ class Runtime:
                  ", ".join(wanted), self.config.trigger_depth)
 
     def clear_triggers(self) -> None:
-        self.worker.send(Request().add("CMD", "TRIG").add("MODE", "CLEAR"),
-                         timeout_s=60.0)
+        response = self.worker.send(
+            Request().add("CMD", "TRIG").add("MODE", "CLEAR")
+            .add("PREFIX", self._trigger_prefix), timeout_s=60.0,
+        )
+        if not response.ok:
+            raise WorkerError("failed to remove this runtime's capture triggers")
         self._installed_trigger_roots = ()
 
     # ------------------------------------------------------------- execution
@@ -396,6 +498,7 @@ class Runtime:
             raise KeyError(
                 f"{spec.routine} has not been loaded; call load_routine() first"
             )
+        self._sync_triggers(loaded.plan)
         entry = spec.entry
         extrinsic = loaded.facts.is_extrinsic(entry)
         if entry and entry.startswith("$$"):
@@ -461,8 +564,8 @@ class Runtime:
             )
         if resp.get_int("TRUNCATED"):
             log.warning(
-                "%s: a watched global root exceeded %d nodes; globals_out is truncated",
-                spec.routine, self.config.max_nodes_per_root,
+                "%s: incomplete globals_out capture (%s)",
+                spec.routine, resp.get("REASON") or f"watched root exceeds {self.config.max_nodes_per_root} nodes",
             )
 
         refs = resp.get_all("GR")
@@ -483,7 +586,7 @@ class Runtime:
             globals_out=globals_out,
             duration_ms=max(0, int(resp.get_int("DURUS") / 1000)),
             restarts=resp.get_int("RESTARTS"),
-            void=False,
+            void=bool(resp.get_int("TRUNCATED")),
         )
 
     def execute_stable(self, spec: ExecSpec, attempts: int = 3) -> ExecResult:
@@ -508,6 +611,7 @@ class Runtime:
                 "quiesced. Run scripts/bootstrap.sh --measure.",
                 spec.routine, attempts,
             )
+            return replace(result, void=True)
         return result
 
     # ------------------------------------------------------------- equivalence
@@ -527,34 +631,35 @@ class Runtime:
         n_void = 0
         diverged_cases = 0
 
-        with self.clean_state():
-            for index, raw_spec in enumerate(cases):
-                spec = replace(raw_spec, routine=routine)
+        try:
+            with self.clean_state():
+                for index, raw_spec in enumerate(cases):
+                    spec = replace(raw_spec, routine=routine)
 
-                self.load_routine(routine, baseline_src)
-                base = self.execute_stable(spec)
+                    self.load_routine(routine, baseline_src)
+                    base = self.execute_stable(spec)
 
-                self.load_routine(routine, candidate_src)
-                cand = self.execute_stable(spec)
+                    self.load_routine(routine, candidate_src)
+                    cand = self.execute_stable(spec)
 
-                if base.void or cand.void:
-                    n_void += 1
-                    log.warning(
-                        "case %d is void (baseline=%s candidate=%s); not scored",
-                        index, base.error, cand.error,
-                    )
-                    continue
+                    if base.void or cand.void or base.restarts or cand.restarts:
+                        n_void += 1
+                        log.warning(
+                            "case %d is void (baseline=%s candidate=%s); not scored",
+                            index, base.error, cand.error,
+                        )
+                        continue
 
-                found = diff_results(base, cand, index)
-                if found:
-                    diverged_cases += 1
-                    divergences.extend(found)
-
-        # Leave the environment holding the baseline, never the candidate.
-        self.load_routine(routine, baseline_src)
+                    found = diff_results(base, cand, index)
+                    if found:
+                        diverged_cases += 1
+                        divergences.extend(found)
+        finally:
+            # Source restoration also runs after compilation or execution errors.
+            self.load_routine(routine, baseline_src)
 
         return VerifyReport(
-            equivalent=not divergences,
+            equivalent=not divergences and n_void == 0,
             divergences=divergences,
             n_cases=len(cases),
             n_diverged=diverged_cases,

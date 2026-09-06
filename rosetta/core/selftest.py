@@ -194,14 +194,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--snapshot", action="store_true",
                     help="also do a real .dat snapshot/restore round trip (~40s)")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--budget", type=float, default=None,
+                    help="optionally fail if runtime exceeds this many seconds")
     args = ap.parse_args(argv)
+    if args.budget is not None and args.budget <= 0:
+        ap.error("--budget must be positive")
 
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    budget = 5.0
+    budget = args.budget
     try:
         steps = run(full_snapshot=args.snapshot)
     except SelfTestFailure as exc:
@@ -215,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     for s in steps[:-1]:
         print(f"  ok   {s.seconds:6.2f}s  {s.name}\n              {s.detail}")
     print(f"\n  TOTAL {total:6.2f}s")
-    if not args.snapshot and total > budget:
+    if budget is not None and total > budget:
         print(f"\nFAIL  over the {budget:g}s budget", file=sys.stderr)
         return 1
     print("  PASS")

@@ -27,7 +27,7 @@ FORBIDDEN_COMMANDS = ("TSTART", "TCOMMIT", "TROLLBACK", "TRESTART")
 #: Command position: start of line, then a label, then whitespace, then any
 #: number of dot-nesting markers. Abbreviations included -- `TC` commits too.
 _TP_COMMAND_RE = re.compile(
-    r"^[^\s;]*[ \t]+(?:\.[ \t]*)*(TS|TC|TRO|TRE|TSTART|TCOMMIT|TROLLBACK|TRESTART)"
+    r"(?:^|[ \t.])(TS|TC|TRO|TRE|TSTART|TCOMMIT|TROLLBACK|TRESTART)"
     r"(?=[ \t:,]|$)",
     re.IGNORECASE,
 )
@@ -73,14 +73,14 @@ class RoutineFacts:
 
     @property
     def writes_device(self) -> bool:
-        """True if the routine has a command-position WRITE.
+        """True if the routine has command-position WRITE or ZWRITE.
 
         A lower bound: output emitted through ``DO EN^DDIOL`` or through ``@``
         indirection is invisible here. When it is true we pay for a capture
         device; when it is false we skip the device entirely, which is the
         common case for the computational routines the benchmark targets.
         """
-        return self.facts.get("commands", {}).get("WRITE", 0) > 0
+        return any(self.facts.get("commands", {}).get(cmd, 0) > 0 for cmd in ("WRITE", "ZWRITE"))
 
     @property
     def write_set_is_bounded(self) -> bool:
@@ -95,6 +95,26 @@ class RoutineFacts:
             and self.facts.get("indirection", 0) == 0
             and self.facts.get("xecute", 0) == 0
         )
+
+    @property
+    def max_global_depth(self) -> int:
+        """Conservative subscript-depth bound over explicit global references."""
+        maximum = int(self.facts.get("capture_global_depth", 0))
+        for raw in self.source.splitlines():
+            text = strip_comment(mask_strings(raw))
+            for match in re.finditer(r"\^[%A-Za-z][A-Za-z0-9]*\(", text):
+                depth, subscripts = 1, 1
+                for char in text[match.end():]:
+                    if char == "(":
+                        depth += 1
+                    elif char == ")":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    elif char == "," and depth == 1:
+                        subscripts += 1
+                maximum = max(maximum, subscripts)
+        return maximum
 
     def label(self, name: str) -> dict[str, Any] | None:
         for lab in self.facts.get("labels", []):
@@ -185,12 +205,12 @@ def find_tp_commands(source: str) -> list[tuple[int, str]]:
     """
     hits: list[tuple[int, str]] = []
     for lineno, raw in enumerate(source.splitlines(), start=1):
-        masked = strip_comment(mask_strings(raw))
-        if not masked.strip():
+        if not _TP_COMMAND_RE.search(strip_comment(mask_strings(raw))):
             continue
-        m = _TP_COMMAND_RE.match(masked)
-        if m:
-            hits.append((lineno, m.group(1).upper()))
+        commands = analyse_source("ROSGUARD", raw + "\n").get("commands", {})
+        for command in FORBIDDEN_COMMANDS:
+            if commands.get(command, 0):
+                hits.append((lineno, command))
     return hits
 
 

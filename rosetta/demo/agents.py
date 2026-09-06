@@ -147,13 +147,15 @@ def opencode_available() -> tuple[bool, str]:
         return False, "opencode is not on PATH"
     try:
         proc = subprocess.run(
-            [binary, "providers", "list"],
+            [binary, "--version"],
             capture_output=True,
             text=True,
             timeout=60,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"could not run `opencode providers list`: {exc}"
+        return False, f"could not run `opencode --version`: {exc}"
+    if proc.returncode != 0:
+        return False, f"opencode --version exited {proc.returncode}"
     text = proc.stdout + proc.stderr
     if re.search(r"\b0 credentials\b", text):
         return True, f"opencode at {binary} (no stored credentials; hosted models only)"
@@ -212,6 +214,7 @@ class OpenCodeAgent:
         cwd: str | None = None,
         timeout_s: float = 900.0,
         max_attempts: int = 3,
+        isolated: bool = False,
     ) -> None:
         self.name = f"opencode:{model or 'default'}"
         self.model = model or os.environ.get("ROSETTA_DEMO_MODEL")
@@ -219,6 +222,7 @@ class OpenCodeAgent:
         self.cwd = cwd
         self.timeout_s = timeout_s
         self.max_attempts = max_attempts
+        self.isolated = isolated
         self.transcripts: list[str] = []
         self._isolated: str | None = None
 
@@ -226,10 +230,12 @@ class OpenCodeAgent:
         binary = shutil.which("opencode")
         if not binary:
             raise AgentUnavailable("opencode is not on PATH")
-        cmd = [binary, "run"]
+        cmd = [binary, "run", "--format", "json"]
+        if self.isolated or not self.tools_on:
+            cmd += ["--agent", "rosetta-eval", "--pure", "--dir", self._workdir()]
         if self.model:
             cmd += ["--model", self.model]
-        cmd.append(prompt)
+        cmd += ["--", prompt]
         return cmd
 
     def _workdir(self) -> str:
@@ -241,15 +247,48 @@ class OpenCodeAgent:
         in the repo with a flag would still leave the server one config reload
         away from being live.
         """
-        if self.tools_on:
+        if self.tools_on and not self.isolated:
             return self.cwd or os.getcwd()
         if self._isolated is None:
             self._isolated = tempfile.mkdtemp(prefix="rosetta-tools-off-")
             Path(self._isolated, "opencode.json").write_text(
-                json.dumps({"$schema": "https://opencode.ai/config.json"}, indent=2),
+                json.dumps(self._isolation_config(), indent=2),
                 encoding="utf-8",
             )
         return self._isolated
+
+    @staticmethod
+    def _isolation_config() -> dict:
+        return {
+            "$schema": "https://opencode.ai/config.json",
+            "instructions": [], "plugin": [],
+            "tools": {"*": False}, "permission": {"*": "deny"},
+            "default_agent": "rosetta-eval",
+            "agent": {"rosetta-eval": {
+                "mode": "primary", "description": "Isolated benchmark candidate generation",
+                "prompt": "Return only the requested source and explanation. All tools are disabled.",
+                "tools": {"*": False}, "permission": {"*": "deny"},
+            }},
+        }
+
+    def _environment(self) -> dict[str, str]:
+        env = os.environ.copy()
+        if self.isolated or not self.tools_on:
+            # Keep configured providers, but override inherited tool permissions.
+            config = json.loads(env.get("OPENCODE_CONFIG_CONTENT", "{}"))
+            config.update(self._isolation_config())
+            env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
+            env["OPENCODE_DISABLE_CLAUDE_CODE"] = "true"
+            # Some CLI builds resolve the project from inherited PWD rather
+            # than the subprocess working directory. Keep all three aligned.
+            env["PWD"] = self._workdir()
+        return env
+
+    def close(self) -> None:
+        """Remove the private candidate workspace after a benchmark condition."""
+        if self._isolated:
+            shutil.rmtree(self._isolated)
+            self._isolated = None
 
     def propose(
         self, task: DemoTask, baseline: str, feedback: Sequence[str]
@@ -261,6 +300,10 @@ class OpenCodeAgent:
             raise AgentUnavailable(reason)
 
         template = _PROMPT_TOOLS_ON if self.tools_on else _PROMPT_TOOLS_OFF
+        if self.isolated:
+            template = _PROMPT_TOOLS_OFF.replace(
+                "source from VistA, the US Department of Veterans\nAffairs health system", "source"
+            ) + "\n{feedback}"
         prompt = template.format(
             routine=task.routine,
             request=task.request,
@@ -279,6 +322,7 @@ class OpenCodeAgent:
                 text=True,
                 timeout=self.timeout_s,
                 cwd=self._workdir(),
+                env=self._environment(),
             )
         except subprocess.TimeoutExpired as exc:
             raise AgentUnavailable(
@@ -289,11 +333,23 @@ class OpenCodeAgent:
 
         output = proc.stdout
         self.transcripts.append(output + proc.stderr)
-        if proc.returncode != 0 and not output.strip():
+        if proc.returncode != 0:
             raise AgentUnavailable(
                 f"opencode run exited {proc.returncode}: {proc.stderr.strip()[:400]}"
             )
 
+        # JSON events keep terminal banners and tool output out of candidates.
+        text_parts = []
+        for line in output.splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") == "error":
+                raise AgentUnavailable(f"OpenCode reported an error: {str(event.get('error'))[:400]}")
+            if event.get("type") == "text":
+                text_parts.append(event.get("part", {}).get("text", ""))
+        output = "\n".join(text_parts)
         blocks = _FENCE.findall(output)
         if not blocks:
             raise AgentUnavailable(

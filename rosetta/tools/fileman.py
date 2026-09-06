@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import re
 from dataclasses import asdict, dataclass, field as dc_field
 from functools import lru_cache
@@ -636,9 +637,16 @@ def default_dictionary(path: Path | None = None) -> DataDictionary:
     Degrades to an empty dictionary — never raises — when the cache is missing,
     so the other four static tools keep working in a checkout without it.
     """
+    configured = os.environ.get("ROSETTA_FILEMAN_CACHE")
+    if path is None and configured is None and os.environ.get("ROSETTA_CORPUS_DIR"):
+        return DataDictionary.empty()
+    if path is None and configured and configured.lower() in {"off", "none", "0"}:
+        return DataDictionary.empty()
     try:
-        return _load_cached(str(path or DEFAULT_CACHE_PATH))
-    except (FileNotFoundError, OSError, ValueError):
+        return _load_cached(str(Path(path or configured or DEFAULT_CACHE_PATH).expanduser()))
+    except FileNotFoundError:
+        if configured:
+            raise
         return DataDictionary.empty()
 
 

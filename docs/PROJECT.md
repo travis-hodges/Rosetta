@@ -2,6 +2,24 @@
 
 **Ground truth for code nobody can read.**
 
+## Current product direction — September 6, 2026
+
+Rosetta is a terminal coding environment built on OpenCode, with configurable models
+(including user-supplied language specialists), executable evaluations, and benchmarks.
+The verification engine is a central component of that product. VA FOIA VistA is an
+optional public corpus, not a required identity or hardcoded customer environment.
+MUMPS/YottaDB is implemented; other runtime adapters and trained specialist weights are
+not shipped. See [README](../README.md) and [USAGE](USAGE.md) for current commands.
+
+The sections below preserve the original hackathon research and plan. Their schedule,
+prior measurements, and model-first rejection describe that historical build sequence;
+they do not override the current product direction. The frozen core contract and split
+lock remain protected. Current benchmark generation disables agent tools and measures
+no-feedback versus harness-feedback repair, preventing direct access to reference source.
+It does not yet measure autonomous MCP tool use.
+
+---
+
 > **This file defines what Rosetta *is*.** Rosetta is a verification system for AI
 > modification of legacy code in languages almost nobody can read — MUMPS, COBOL, JOVIAL,
 > CMS-2. It is **not** the GitHub-issue orchestration service in `orchestration/`. That

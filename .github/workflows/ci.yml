@@ -1,4 +1,4 @@
-name: Orchestrator checks
+name: Rosetta checks
 
 on:
   push:
@@ -19,13 +19,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
       - name: Compile and test
         run: |
-          python -m compileall -q orchestration tests
+          python -m compileall -q rosetta orchestration tests
           python -m unittest discover -s tests -v
       - name: Build landing page
         run: |
           node --test tests/web.test.mjs
           node scripts/build.mjs
-

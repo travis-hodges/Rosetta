@@ -37,7 +37,6 @@ import argparse
 import gzip
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -104,29 +103,7 @@ class ContainerSpec:
         return f"{self.gtm_dist}/mumps"
 
 
-def _run_m(spec: ContainerSpec, script: str, timeout_s: float = 300.0) -> str:
-    """Pipe an M script into ``mumps -direct`` in the container; return stdout.
-
-    Direct mode is used deliberately: it needs no routine written into the
-    container's ``/home/vehu/r``, so the extraction leaves no trace.
-    """
-    cmd = [
-        "docker", "exec", "-i",
-        "-e", f"gtm_dist={spec.gtm_dist}",
-        "-e", f"gtmgbldir={spec.gtmgbldir}",
-        spec.name, spec.mumps, "-direct",
-    ]
-    proc = subprocess.run(
-        cmd, input=script, capture_output=True, text=True, timeout=timeout_s
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"mumps -direct failed (rc={proc.returncode}) in container "
-            f"{spec.name!r}: {proc.stderr.strip()[:500]}"
-        )
-    if proc.stderr.strip():
-        print(f"[ddcache] M stderr: {proc.stderr.strip()[:500]}", file=sys.stderr)
-    return proc.stdout
+from rosetta.core.fileman_export import _run_m
 
 
 def _parse_dd(out: str) -> dict[str, dict[str, Any]]:

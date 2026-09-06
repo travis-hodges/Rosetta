@@ -8,8 +8,8 @@ Two artifacts, one source of truth:
     chance to break that contract for whatever consumes the report next.
 
 ``results/report.json`` + a text table
-    The richer view section 9 asks for: per-operator breakdown, repair
-    iterations, pass@3, assertion rates, exclusions, provenance.
+    Per-operator breakdown, bounded repair success, assertion rates,
+    exclusions, and provenance. Feedback retries are not independent pass@k.
 
 Rules this module enforces, all of which fail loudly:
 
@@ -37,7 +37,9 @@ reader has to guess what it is looking at.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import re
 import sys
 from dataclasses import dataclass
@@ -48,7 +50,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from rosetta.bench import build as build_mod
 from rosetta.bench import split as split_mod
 from rosetta.bench.score import ConditionScore, RunScore, score_run
-from rosetta.bench.trace import CONDITIONS, TraceRecord, read_traces
+from rosetta.bench.trace import CONDITIONS, PROTOCOL, TraceRecord, read_traces, task_fingerprint
 
 __all__ = [
     "REQUIRED_CONDITIONS",
@@ -175,6 +177,39 @@ def build_report(
     if not records:
         raise ReportRefused("no trace records; nothing measured, nothing published")
 
+    protocols = {r.extra.get("protocol") for r in records}
+    if protocols != {PROTOCOL}:
+        raise ReportRefused(
+            "legacy, unknown, or mixed benchmark protocols cannot be published; "
+            "rerun with isolated candidate generation and recorded protocol provenance"
+        )
+    run_ids = {r.run_id for r in records}
+    if len(run_ids) != 1 or not next(iter(run_ids)):
+        raise ReportRefused("compare conditions from one identified run, not mixed runs")
+    budgets = {r.extra.get("attempt_budget") for r in records}
+    timeouts = {r.extra.get("model_timeout_s") for r in records}
+    if (len(budgets) != 1 or any(type(b) is not int or b < 1 for b in budgets)
+            or len(timeouts) != 1 or any(type(t) not in (int, float)
+                                       or not math.isfinite(t) or t <= 0
+                                       for t in timeouts)):
+        raise ReportRefused("all conditions need the same positive attempt and timeout budgets")
+    if any(r.extra.get("agent_tools_enabled") is not False for r in records):
+        raise ReportRefused("this protocol requires candidate tools to be disabled")
+    models = {c: {r.model for r in records if r.condition == c}
+              for c in {r.condition for r in records}}
+    if any(len(v) != 1 or not next(iter(v)) or next(iter(v)) == "opencode"
+           for v in models.values()):
+        raise ReportRefused("each condition needs one explicit provider/model identity")
+    if models.get("baseline") != models.get("scaffolded"):
+        raise ReportRefused("baseline and scaffolded must use the same model")
+    fingerprints: dict[str, str] = {}
+    for record in records:
+        fingerprint = record.extra.get("task_sha256", "")
+        if not isinstance(fingerprint, str) or not _HEX64.fullmatch(fingerprint):
+            raise ReportRefused("every trace needs an exact task fingerprint")
+        if fingerprints.setdefault(record.task_id, fingerprint) != fingerprint:
+            raise ReportRefused(f"task content differs between attempts: {record.task_id}")
+
     lock = split_mod.load_lock(lock_path)
     split_hash = str(lock["content_hash"])
     eval_set = {str(n).upper() for n in lock["eval"]}
@@ -203,6 +238,18 @@ def build_report(
             str(t["task_id"]): str(t["routine"]).upper()
             for t in task_set.get("tasks", [])
         }
+        for task in task_set.get("tasks", []):
+            tid = str(task["task_id"])
+            expected = task_set.get("routine_sources", {}).get(task["routine"])
+            if expected and hashlib.sha256(task.get("baseline_src", "").encode()).hexdigest() != expected:
+                raise ReportRefused(f"task reference differs from source manifest: {tid}")
+            if tid in fingerprints and all(key in task for key in
+                    ("baseline_src", "mutated_src", "cases")):
+                if fingerprints[tid] != task_fingerprint(task):
+                    raise ReportRefused(f"trace task fingerprint differs from task set: {tid}")
+        if any(r.task_id in task_routine and r.routine
+               and r.routine.upper() != task_routine[r.task_id] for r in records):
+            raise ReportRefused("trace routine does not match its task set (possible train-split mismatch)")
         # The task set is authoritative for task facts, so a producer that left
         # routine/operator/difficulty blank still gets a per-operator breakdown.
         facts = {
@@ -256,6 +303,7 @@ def build_report(
             f"traces reference routines outside the split lock: {off_split[:5]}"
         )
 
+    all_conditions = score_run(records, task_ids=known_task_ids, common_only=False)
     score = score_run(records, task_ids=known_task_ids, common_only=True)
 
     missing = [c for c in REQUIRED_CONDITIONS if c not in score.conditions]
@@ -271,7 +319,7 @@ def build_report(
             "no task is scoreable in every condition; there is nothing comparable "
             "to publish. Per-condition exclusions: "
             + json.dumps(
-                {c: dict(s.excluded) for c, s in score.conditions.items()}, sort_keys=True
+                {c: dict(s.excluded) for c, s in all_conditions.conditions.items()}, sort_keys=True
             )
         )
     if score.duplicate_attempts:
@@ -291,10 +339,59 @@ def build_report(
     }
     validate_summary(summary)
 
+    bounded_attempts = {}
+    budget = next(iter(budgets))
+    for condition in ordered:
+        successes = []
+        incomplete = []
+        for tid in score.common_task_ids:
+            attempts = [r for r in records if r.condition == condition and r.task_id == tid]
+            passing = [r.attempt for r in attempts if r.passed and r.attempt <= budget]
+            if passing:
+                successes.append(min(passing))
+            elif {r.attempt for r in attempts if r.scoreable} != set(range(1, budget + 1)):
+                incomplete.append(tid)
+        bounded_attempts[condition] = {
+            "attempt_budget": budget,
+            "n_tasks": len(score.common_task_ids),
+            "n_passed": len(successes),
+            "incomplete_task_ids": incomplete,
+            "success_rate": None if incomplete else len(successes) / len(score.common_task_ids),
+            "mean_attempts_to_success": sum(successes) / len(successes) if successes else None,
+        }
+
+    run_detail = score.to_json()
+    for condition in run_detail["conditions"].values():
+        # The generic scorer can read historical independent-sample traces;
+        # this protocol's sequential feedback retries do not justify pass@k.
+        condition.pop("pass_at_3", None)
+        condition.pop("pass_at_k", None)
+
     detail = {
         "schema": "rosetta.bench.report/1",
         "generated_at": stamp,
         "summary": summary,
+        "protocol": {
+            "id": PROTOCOL,
+            "run_id": next(iter(run_ids)),
+            "models": {c: next(iter(v)) for c, v in models.items()},
+            "attempt_budget": next(iter(budgets)),
+            "model_timeout_s": next(iter(timeouts)),
+            "agent_tools_enabled": False,
+            "comparison": "no feedback versus harness feedback; not autonomous MCP tool use",
+            "task_sha256": fingerprints,
+        },
+        "coverage": {
+            "task_set_count": len(known_task_ids) if known_task_ids is not None else None,
+            "attempted_task_count": len({r.task_id for r in records}),
+            "common_scoreable_task_count": len(score.common_task_ids),
+            "partial": known_task_ids is None or set(score.common_task_ids) != known_task_ids,
+            "condition_exclusions": {
+                c: {"reasons": dict(s.excluded), "task_exclusions": list(s.excluded_task_ids)}
+                for c, s in all_conditions.conditions.items()
+            },
+        },
+        "bounded_attempts": bounded_attempts,
         "split": {
             "hash": split_hash,
             "lock": str(lock_path),
@@ -324,8 +421,12 @@ def build_report(
             ),
             "scored_task": "a task whose attempt 1 was graded and not void",
             "published_tasks": "tasks scoreable in every condition",
+            "attempts": (
+                "baseline retries are independent; scaffolded retries receive harness feedback. "
+                "A multi-attempt success rate is a bounded repair result, not independent pass@k"
+            ),
         },
-        "run": score.to_json(),
+        "run": run_detail,
     }
     return Report(summary=summary, detail=detail, score=score)
 
@@ -354,9 +455,9 @@ def write_report(
 # ----------------------------------------------------------------------
 
 _NAMES = {
-    "baseline": "Baseline (no tools)",
-    "scaffolded": "With Rosetta",
-    "tuned_scaffolded": "Tuned + Rosetta",
+    "baseline": "No feedback",
+    "scaffolded": "Harness feedback",
+    "tuned_scaffolded": "Tuned + feedback",
 }
 
 
@@ -374,9 +475,17 @@ def render_text(report: Report) -> str:
         f"{report.task_count} tasks scored in every condition"
     )
     lines.append("")
+    coverage = report.detail["coverage"]
+    if coverage["partial"]:
+        lines.append(f"PARTIAL evidence: {coverage['common_scoreable_task_count']} common scoreable "
+                     f"tasks of {coverage['task_set_count'] or 'unknown'} in the task set.")
+    lines.append("Protocol: isolated generation; scaffolded receives harness feedback, not MCP tools.")
+    lines.append("Repair column: success within the attempt budget; mean tries is over successes.")
+    lines.append("")
+    repair_label = f"repair≤{report.detail['protocol']['attempt_budget']}"
     header = (
-        f"{'condition':<22}{'pass@1':>8}{'pass@3':>8}{'false conf':>12}"
-        f"{'assert':>8}{'FC|assert':>11}{'repair':>8}{'n':>6}"
+        f"{'condition':<22}{'pass@1':>8}{repair_label:>10}{'false conf':>12}"
+        f"{'assert':>8}{'FC|assert':>11}{'mean try':>8}{'n':>6}"
     )
     lines.append(header)
     lines.append("-" * len(header))
@@ -384,15 +493,16 @@ def render_text(report: Report) -> str:
         s = score.conditions.get(cid)
         if s is None:
             continue
-        repair = s.mean_repair_iterations
+        bounded = report.detail["bounded_attempts"][cid]
+        repair = bounded["mean_attempts_to_success"]
         lines.append(
             f"{_NAMES.get(cid, cid):<22}"
             f"{_pct(s.pass_at_1):>8}"
-            f"{_pct(s.pass_at_3):>8}"
+            f"{_pct(bounded['success_rate']):>10}"
             f"{_pct(s.false_confidence_rate):>12}"
             f"{_pct(s.assertion_rate):>8}"
             f"{_pct(s.false_confidence_given_assertion):>11}"
-            f"{'      -' if repair is None else f'{repair:7.2f}'}"
+            f"{'       -' if repair is None else f'{repair:8.2f}'}"
             f"{s.n_tasks:>6}"
         )
 

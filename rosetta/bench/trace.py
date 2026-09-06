@@ -43,12 +43,14 @@ Producing a record::
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Literal, Mapping, Sequence
 
 __all__ = [
     "SCHEMA",
+    "PROTOCOL",
     "CONDITIONS",
     "VERIFIER_TOOLS",
     "Assertion",
@@ -62,10 +64,21 @@ __all__ = [
     "iter_traces",
     "read_traces",
     "trace_paths",
+    "task_fingerprint",
     "write_traces",
 ]
 
 SCHEMA = "rosetta.bench.trace/1"
+PROTOCOL = "rosetta.bench.isolated-harness-feedback/2"
+
+
+def task_fingerprint(task: Mapping[str, Any]) -> str:
+    """Bind a trace to the exact reference, mutant, routine, and grading cases."""
+    payload = {key: task[key] for key in (
+        "task_id", "routine", "baseline_src", "mutated_src", "cases"
+    )}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"))
+                          .encode("utf-8")).hexdigest()
 
 Condition = Literal["baseline", "scaffolded", "tuned_scaffolded"]
 
@@ -159,12 +172,12 @@ class Verdict:
 
     @property
     def trustworthy(self) -> bool:
-        """False when no case produced a scoreable result (all void, or none ran).
+        """False when any case is void, or none ran.
 
         A void case "carries NO information and must never be scored" (frozen
-        contract). A verdict with nothing left after voids is not a verdict.
+        contract). A partially executed suite must not share a denominator with a full suite.
         """
-        return self.n_cases > 0 and self.n_void < self.n_cases
+        return self.n_cases > 0 and self.n_void == 0
 
     @classmethod
     def from_report(cls, report: Any, max_divergences: int = 20) -> Verdict:
@@ -539,11 +552,11 @@ def read_traces(source: str | Path | Sequence[str | Path]) -> list[TraceRecord]:
     return out
 
 
-def write_traces(records: Iterable[TraceRecord], path: str | Path) -> Path:
-    """Append-safe write of records as JSONL. Returns the path."""
+def write_traces(records: Iterable[TraceRecord], path: str | Path, *, append: bool = False) -> Path:
+    """Write JSONL; append permits durable progress after each completed attempt."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w", encoding="utf-8") as fh:
+    with p.open("a" if append else "w", encoding="utf-8") as fh:
         for rec in records:
             fh.write(json.dumps(rec.to_json(), ensure_ascii=False) + "\n")
     return p

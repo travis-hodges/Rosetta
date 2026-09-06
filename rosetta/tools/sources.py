@@ -1,22 +1,8 @@
-"""Where routine source comes from: the local corpus first, container second.
+"""Local MUMPS corpus with an explicit, optional container source fallback.
 
-A MUMPS **routine** is one file of code, one routine per file, named for the
-file: ``XLFDT.m`` holds routine ``XLFDT``. Names beginning with ``%`` are stored
-with a leading underscore instead, because ``%`` is not portable in filenames —
-``_DTC.m`` is routine ``%DTC``.
-
-Two sources, in order:
-
-1. ``data/routines/`` — the 500-routine benchmark corpus, committed to the repo.
-   Always used when the routine is there. Offline, fast, and the thing the
-   benchmark actually scores.
-2. the ``vehu`` container's ``/home/vehu/r`` — all 39,612 routines, read with
-   ``docker exec cat``. Used only as a fallback so an agent can follow a call
-   into a routine that was not selected for the corpus. Disable with
-   ``ROSETTA_TOOLS_CONTAINER=off``.
-
-The fallback is a plain file read; it does not start an M process. Execution
-stays behind the seam in ``rosetta.tools.runtime``.
+ROSETTA_CORPUS_DIR selects user-supplied .m files. The bundled VA corpus is an
+example default; no VA container is contacted unless ROSETTA_TOOLS_CONTAINER
+is set. Container I/O lives in rosetta.core.source_io.
 """
 
 from __future__ import annotations
@@ -24,6 +10,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import subprocess
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,7 +20,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CORPUS_DIR = _REPO_ROOT / "data" / "routines"
 
 #: Container facts, per PROJECT.md section 14.
-DEFAULT_CONTAINER = "vehu"
+DEFAULT_CONTAINER = None
 DEFAULT_ROUTINE_DIR = "/home/vehu/r"
 
 _NAME_CHARS = set("%ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
@@ -70,7 +57,7 @@ def normalise_name(name: str) -> str:
     n = (name or "").strip().upper()
     if not n:
         raise ValueError("empty routine name")
-    if not set(n) <= _NAME_CHARS or n[0].isdigit():
+    if not re.fullmatch(r"%?[A-Z][A-Z0-9]*", n):
         raise ValueError(
             f"not a valid MUMPS routine name: {name!r} "
             "(letters, digits, optional leading %)"
@@ -100,7 +87,10 @@ class RoutineStore:
         routine_dir: str = DEFAULT_ROUTINE_DIR,
         docker_timeout_s: float = 20.0,
     ) -> None:
-        self.corpus_dir = corpus_dir or DEFAULT_CORPUS_DIR
+        configured = os.environ.get("ROSETTA_CORPUS_DIR")
+        self.corpus_dir = Path(corpus_dir or configured or DEFAULT_CORPUS_DIR).expanduser().resolve()
+        if (corpus_dir is not None or configured) and not self.corpus_dir.is_dir():
+            raise ValueError(f"routine corpus directory does not exist: {self.corpus_dir}")
         env = os.environ.get("ROSETTA_TOOLS_CONTAINER")
         if not isinstance(container, _Unset):
             self.container: str | None = container
@@ -110,7 +100,7 @@ class RoutineStore:
             self.container = None
         else:
             self.container = env
-        self.routine_dir = routine_dir
+        self.routine_dir = os.environ.get("ROSETTA_TOOLS_ROUTINE_DIR", routine_dir)
         self.docker_timeout_s = docker_timeout_s
         self._corpus_names: list[str] | None = None
         self._container_names: list[str] | None = None
@@ -132,15 +122,8 @@ class RoutineStore:
     # -- container ---------------------------------------------------------
 
     def _docker(self, args: list[str]) -> str:
-        proc = subprocess.run(
-            ["docker", "exec", self.container or "", *args],
-            capture_output=True,
-            text=True,
-            timeout=self.docker_timeout_s,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(proc.stderr.strip()[:300] or "docker exec failed")
-        return proc.stdout
+        from rosetta.core.source_io import container_files
+        return container_files(self.container or "", args, self.docker_timeout_s)
 
     def container_names(self) -> list[str]:
         """Routine names in the container, or ``[]`` if it is unreachable."""
@@ -149,10 +132,8 @@ class RoutineStore:
         if self._container_names is None:
             try:
                 out = self._docker(["ls", self.routine_dir])
-            except (OSError, subprocess.SubprocessError, RuntimeError):
-                self._container_failed = True
-                self._container_names = []
-                return []
+            except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+                raise RoutineNotFound(f"configured container {self.container!r} is unavailable: {exc}") from exc
             self._container_names = sorted(
                 name_for_filename(line.strip())
                 for line in out.splitlines()

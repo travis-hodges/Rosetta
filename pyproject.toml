@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rosetta-legacy"
+version = "0.1.0"
+description = "Terminal coding and executable evaluation for obscure languages"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+rosetta = "rosetta.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rosetta*"]
+
+[tool.setuptools.package-data]
+"rosetta.core" = ["m/*.m"]

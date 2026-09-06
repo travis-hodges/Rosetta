@@ -22,7 +22,8 @@ MAIN ; mumps -run MAIN^ROSWRK
  N ROSLVL,ROSQ,ROSST,ROSREQ,ROSRES,ROSTMPD,ROSCAPF,ROSOBJD
  S U="^"
  U $P:(NOWRAP:WIDTH=1048576)
- S ROSTMPD="/home/vehu/tmp/rosetta"
+ S ROSTMPD=$ZTRNLNM("ROSWRKTMP")
+ I ROSTMPD="" S ROSTMPD="/home/vehu/tmp/rosetta"
  S ROSOBJD=$ZTRNLNM("ROSWRKOBJD")
  ; Per-process capture file. A plain OS file gets no TP isolation, so a
  ; shared path let concurrent verifiers read each other's stdout and
@@ -181,24 +182,31 @@ TRIG ; install or clear $ZTRIGGER capture triggers
  ; Triggers are per (global, subscript depth): a "(*)" spec matches exactly one
  ; subscript level, so one pair of triggers is installed per depth 0..DEPTH.
  ; $ZTRIGGER inside TP silently no-ops, so refuse to run in a transaction.
- N MODE,I,R,D,SUB,RC,OK,BAD
+ N MODE,I,R,D,SUB,RC,OK,BAD,PFX,SX,KX
  S MODE=$$RQ("MODE")
+ S PFX=$$RQ("PREFIX")
+ I PFX'?1"Ros"16AN D RESP("STATUS","ERR"),RESP("ERROR","invalid trigger owner prefix") Q
  I $TLEVEL>0 D RESP("STATUS","ERR"),RESP("ERROR","TRIG inside TP ($TLEVEL="_$TLEVEL_")") Q
  S OK=0,BAD=0
  I MODE="CLEAR" D  Q
- . N X S X=$ZTRIGGER("ITEM","-*")
+ . N X S X=$ZTRIGGER("ITEM","-"_PFX_"*")
  . D RESP("STATUS","OK"),RESP("CLEARED",X)
  S D=+$$RQ("DEPTH") S:D'>0 D=8
+ ; Include the process ID in the trigger signature so another runtime cannot
+ ; rename an equivalent trigger definition and accidentally assume ownership.
+ S SX="I $J="_$J_" D TS^ROSWRK",KX="I $J="_$J_" D TK^ROSWRK"
  F I=1:1:+$G(ROSREQ("ROOT")) D
  . S R=$$RQ("ROOT",I) Q:R=""
- . S RC=$ZTRIGGER("ITEM","+"_R_" -commands=SET -xecute=""D TS^ROSWRK""")
+ . S RC=$ZTRIGGER("ITEM","+"_R_" -commands=SET -xecute="""_SX_""" -name="_PFX_"S"_I_"D0")
+ . S:RC OK=OK+1 S:'RC BAD=BAD+1
+ . S RC=$ZTRIGGER("ITEM","+"_R_" -commands=KILL,ZKILL -xecute="""_KX_""" -name="_PFX_"K"_I_"D0")
  . S:RC OK=OK+1 S:'RC BAD=BAD+1
  . S SUB=""
  . N J F J=1:1:D D
  . . S SUB=$S(J=1:"*",1:SUB_",*")
- . . S RC=$ZTRIGGER("ITEM","+"_R_"("_SUB_") -commands=SET -xecute=""D TS^ROSWRK""")
+ . . S RC=$ZTRIGGER("ITEM","+"_R_"("_SUB_") -commands=SET -xecute="""_SX_""" -name="_PFX_"S"_I_"D"_J)
  . . S:RC OK=OK+1 S:'RC BAD=BAD+1
- . . S RC=$ZTRIGGER("ITEM","+"_R_"("_SUB_") -commands=KILL,ZKILL -xecute=""D TK^ROSWRK""")
+ . . S RC=$ZTRIGGER("ITEM","+"_R_"("_SUB_") -commands=KILL,ZKILL -xecute="""_KX_""" -name="_PFX_"K"_I_"D"_J)
  . . S:RC OK=OK+1 S:'RC BAD=BAD+1
  D RESP("STATUS",$S(BAD=0:"OK",1:"ERR")),RESP("INSTALLED",OK),RESP("FAILED",BAD)
  Q
@@ -211,6 +219,9 @@ TS ; SET trigger body. Read $REFERENCE FIRST: our own log write clobbers it.
  ;
 TK ; KILL/ZKILL trigger body
  N ROSR S ROSR=$REFERENCE
+ ; KILL only triggers at the target, not descendants. Refuse a subtree
+ ; deletion whose removed descendants are outside the captured write log.
+ I $D(@ROSR)>9 S ^ROSTMP($J,"TRUNC")=1
  N ROSN S ROSN=$I(^ROSLOG($J))
  S ^ROSLOG($J,ROSN)="K"_$C(9)_ROSR_$C(9)_""
  Q
@@ -256,7 +267,7 @@ EXEC ; run one ExecSpec inside a TP frame
  ; "*" restores the whole local symbol table on a restart. Anything not named
  ; is NOT restored, and a silent restart would otherwise leave stale capture.
  TSTART *:SERIAL
- K ^ROSLOG($J)
+ K ^ROSLOG($J),^ROSTMP($J,"TRUNC")
  F I=1:1:NSEED S @ROSSEED(I)=ROSSEED(I,"v")
  S LVL=$ZLEVEL
  S $ZTRAP="S ROSERR=$ZSTATUS ZGOTO "_LVL_":BODYERR^ROSWRK"
@@ -314,11 +325,11 @@ MKCMD(ROU,ENTRY,ISX,NARG) ; build the XECUTE string; args ride in ROSA(), never
  ;
 HARVEST ; collect globals_out while still inside the frame
  N I,R,C,K
- ; tier 2 -- trigger log (exact, any depth, survives unbounded write sets)
+ ; tier 2 -- final state at touched nodes within the configured depth bound
+ I $G(^ROSTMP($J,"TRUNC")) S ROSTRUNC=ROSTRUNC+1,ROSREASON="trigger-subtree-deletion"
  S C="" F  S C=$O(^ROSLOG($J,C)) Q:C=""  D
  . S R=$P(^ROSLOG($J,C),$C(9),2)
- . I $P(^ROSLOG($J,C),$C(9),1)="K" S ROSGV(R)=$C(1)_"KILLED" Q
- . S ROSGV(R)=$P(^ROSLOG($J,C),$C(9),3,999999)
+ . S ROSGV(R)=$S($D(@R)#10:@R,1:$C(1)_"KILLED")
  ; tier 1 -- scoped $QUERY walk of statically-named roots
  S I="" F  S I=$O(ROSWROOT(I)) Q:I=""  D
  . S R=ROSWROOT(I) Q:R=""

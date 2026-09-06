@@ -10,17 +10,14 @@
       ],
       "enabled": true,
       "environment": {
-        "PYTHONPATH": "/Users/travishodges/Repos/Rosetta",
         "PYTHONUNBUFFERED": "1",
-        "ROSETTA_TOOLS_BACKEND": "auto",
-        "ROSETTA_TOOLS_CONTAINER": "vehu"
+        "ROSETTA_TOOLS_BACKEND": "auto"
       }
     }
   },
   "default_agent": "rosetta",
   "instructions": [
-    "AGENTS.md",
-    "docs/PROJECT.md"
+    ".opencode/instructions.md"
   ],
   "username": "rosetta",
   "permission": {

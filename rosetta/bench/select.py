@@ -40,7 +40,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -100,7 +99,7 @@ for _canon, _forms in {
     "XECUTE": ("X", "XECUTE"),
     "ZALLOCATE": ("ZA", "ZALLOCATE"),
     "ZDEALLOCATE": ("ZD", "ZDEALLOCATE"),
-    "ZKILL": ("ZK", "ZKILL"),
+    "ZKILL": ("ZK", "ZKILL", "ZW", "ZWITHDRAW"),
     "ZSYSTEM": ("ZSY", "ZSYSTEM"),
     "ZWRITE": ("ZWR", "ZWRITE"),
 }.items():
@@ -785,18 +784,8 @@ def extract_from_container(
     user and streams the archive out. Returns the number of files present in
     ``dest`` afterwards.
     """
-    dest.mkdir(parents=True, exist_ok=True)
-    archive = subprocess.run(
-        [
-            "docker", "exec", "-u", "vehu", container, "bash", "-lc",
-            f'cd {routine_dir} && find . -maxdepth 1 -name "*.m" -printf "%f\\0" '
-            "| tar --null -T - -cf -",
-        ],
-        check=True,
-        capture_output=True,
-    ).stdout
-    subprocess.run(["tar", "-xf", "-", "-C", str(dest)], input=archive, check=True)
-    return len(list(dest.glob("*.m")))
+    from rosetta.core.source_io import extract_sources
+    return extract_sources(dest, container, routine_dir)
 
 
 # --------------------------------------------------------------------------

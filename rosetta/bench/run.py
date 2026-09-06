@@ -8,7 +8,7 @@ reads `results/bench/*.jsonl` and produces the published numbers).
 Two conditions map onto the frozen vocabulary section 9 uses:
 
     baseline     stock model, file access only, no Rosetta tools
-    scaffolded   same model, Rosetta tools including verify_change
+    scaffolded   same model, harness verification feedback between attempts
 
 The verdict written to every trace is the HARNESS's own post-hoc
 `verify_equivalence` against the task's frozen case suite -- never whatever
@@ -19,22 +19,28 @@ agent's assertion and the harness's verdict IS the false-confidence rate.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
+import os
 import sys
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
-from rosetta.bench.trace import Assertion, ToolCall, TraceRecord, Verdict, write_traces
+from rosetta.bench.trace import (
+    PROTOCOL, Assertion, ToolCall, TraceRecord, Verdict, task_fingerprint, write_traces,
+)
 from rosetta.core.interface import ExecSpec
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TASKSET = REPO_ROOT / "data" / "tasks" / "eval_tasks.json"
 DEFAULT_OUT = REPO_ROOT / "results" / "bench"
 
-CONDITIONS = {"baseline": False, "scaffolded": True}  # name -> tools_on
+CONDITIONS = {"baseline": False, "scaffolded": True}  # name -> harness feedback enabled
 
 REQUEST = (
     "This MUMPS routine contains an injected regression: exactly one edit was made "
@@ -70,6 +76,16 @@ def load_taskset(path: Path = DEFAULT_TASKSET) -> dict[str, Any]:
     doc = json.loads(path.read_text())
     if not doc.get("tasks"):
         raise RunRefused(f"{path} contains no tasks.")
+    for task in doc["tasks"]:
+        for key in ("task_id", "routine", "baseline_src", "mutated_src", "cases"):
+            if not task.get(key):
+                raise RunRefused(f"task is missing required nonempty field {key!r}")
+        cases = _cases(task)
+        if not cases or any(case.routine != task["routine"] for case in cases):
+            raise RunRefused(f"task {task['task_id']} needs cases for its routine")
+        expected = doc.get("routine_sources", {}).get(task["routine"])
+        if expected and hashlib.sha256(task["baseline_src"].encode()).hexdigest() != expected:
+            raise RunRefused(f"task {task['task_id']} reference differs from source manifest")
     return doc
 
 
@@ -93,6 +109,8 @@ def run_task(
     run_id: str,
     model: str,
     max_attempts: int,
+    on_record: Any = None,
+    model_timeout_s: float = 120.0,
 ) -> list[TraceRecord]:
     """Drive one task in one condition. Returns one record per attempt."""
     tools_on = CONDITIONS[condition]
@@ -111,14 +129,16 @@ def run_task(
     feedback: list[str] = []
     for attempt in range(1, max_attempts + 1):
         started = _now()
+        feedback_received = list(feedback)
         harness_error: str | None = None
         proposal = None
+        transcript_count = len(getattr(agent, "transcripts", []))
         try:
             proposal = agent.propose(shim, mutated_src, feedback)
         except Exception as exc:  # noqa: BLE001 -- a dead agent is harness error
             harness_error = f"{type(exc).__name__}: {exc}"
         if proposal is None and not harness_error:
-            break  # the agent declined to continue; not a failure
+            harness_error = "agent returned no candidate; attempt is ungraded"
 
         candidate = getattr(proposal, "candidate_src", None) if proposal else None
         verdict = None
@@ -130,7 +150,7 @@ def run_task(
                 verdict = Verdict.from_report(report)
                 if tools_on:
                     tool_calls = (
-                        ToolCall(name="verify_change", ok=True,
+                        ToolCall(name="harness_verify_equivalence", ok=True,
                                  equivalent=report.equivalent, at=_now()),
                     )
                     if not report.equivalent:
@@ -162,8 +182,23 @@ def run_task(
                 tool_calls=tool_calls,
                 verdict=verdict,
                 harness_error=harness_error,
+                extra={
+                    "protocol": PROTOCOL,
+                    "attempt_budget": max_attempts,
+                    "model_timeout_s": model_timeout_s,
+                    "task_sha256": task_fingerprint(task),
+                    "feedback_received": feedback_received,
+                    "agent_tools_enabled": False,
+                    "sampling": "independent baseline; sequential harness feedback scaffolded",
+                    "agent_response": (
+                        agent.transcripts[-1] if len(getattr(agent, "transcripts", []))
+                        > transcript_count else None
+                    ),
+                },
             )
         )
+        if on_record:
+            on_record(records[-1])
         if verdict is not None and verdict.equivalent:
             break
         if harness_error:
@@ -180,19 +215,34 @@ def run_benchmark(
     out_dir: Path,
     limit: int | None = None,
     progress: Any = None,
+    model_timeout_s: float = 120.0,
 ) -> Path:
     from rosetta.core import verify_equivalence
     from rosetta.demo.agents import OpenCodeAgent
 
     tasks = taskset["tasks"][:limit] if limit else taskset["tasks"]
-    run_id = f"{backend}-{int(time.time())}"
-    records: list[TraceRecord] = []
+    if not conditions or any(condition not in CONDITIONS for condition in conditions):
+        raise RunRefused("Choose at least one valid benchmark condition.")
+    if (max_attempts < 1 or (limit is not None and limit < 1)
+            or not math.isfinite(model_timeout_s) or model_timeout_s <= 0):
+        raise RunRefused("Attempts, limit, and finite model timeout must be positive.")
+    if not tasks:
+        raise RunRefused("No tasks selected.")
+    if len(set(conditions)) != len(conditions):
+        raise RunRefused("Duplicate benchmark conditions are not allowed.")
+    run_id = f"{backend}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{run_id}.jsonl"
+    # Create the artifact before invoking a provider; completed attempts survive
+    # later failures or interruption instead of vanishing with an in-memory list.
+    path.touch(exist_ok=False)
 
     for condition in conditions:
         tools_on = CONDITIONS[condition]
         if backend == "opencode":
             agent = OpenCodeAgent(model=model, tools_on=tools_on,
-                                  max_attempts=max_attempts)
+                                  max_attempts=max_attempts, isolated=True,
+                                  timeout_s=model_timeout_s)
         else:
             # ScriptedAgent replays a demo task's two recorded rewrites. A
             # benchmark task has no recorded rewrites, so it would produce a
@@ -202,17 +252,17 @@ def run_benchmark(
                 "the scripted backend replays recorded demo edits and cannot "
                 "answer arbitrary benchmark tasks; use --backend opencode"
             )
-        for i, task in enumerate(tasks, start=1):
-            if progress:
-                progress(f"{condition} {i}/{len(tasks)} {task['task_id']}")
-            records.extend(
+        try:
+            for i, task in enumerate(tasks, start=1):
+                if progress:
+                    progress(f"{condition} {i}/{len(tasks)} {task['task_id']}")
                 run_task(task, condition, agent, verify_equivalence,
-                         run_id, model or backend, max_attempts)
-            )
+                         run_id, model or backend, max_attempts,
+                         on_record=lambda record: write_traces([record], path, append=True),
+                         model_timeout_s=model_timeout_s)
+        finally:
+            agent.close()
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / f"{run_id}.jsonl"
-    write_traces(records, path)
     return path
 
 
@@ -220,10 +270,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--taskset", type=Path, default=DEFAULT_TASKSET)
     ap.add_argument("--backend", choices=["scripted", "opencode"], default="opencode")
-    ap.add_argument("--model", default=None)
+    ap.add_argument("--model", default=os.environ.get("ROSETTA_MODEL"))
     ap.add_argument("--conditions", default="baseline,scaffolded")
     ap.add_argument("--attempts", type=int, default=3)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--model-timeout", type=float, default=120.0,
+                    help="maximum seconds per model call (default: 120)")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
@@ -237,8 +289,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     path = run_benchmark(
         taskset, conditions, args.backend, args.model, args.attempts, args.out,
         args.limit, None if args.quiet else lambda m: print(f"  {m}", file=sys.stderr),
+        model_timeout_s=args.model_timeout,
     )
     print(f"wrote {path}")
+    records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if not records or any(
+        record.get("harness_error") or not record.get("verdict")
+        or record["verdict"].get("n_void", 0) > 0
+        for record in records
+    ):
+        print("ERROR: benchmark has missing or failed executions; inspect trace errors", file=sys.stderr)
+        return 2
     return 0
 
 
