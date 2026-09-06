@@ -31,22 +31,6 @@ architecture, frozen contract, benchmark methodology, build plan, and pitch.
 
 ---
 
-## Not to be confused with: the orchestrator
-
-This repository also contains a **separate build service** in [`orchestration/`](orchestration/):
-a local runner that turns owner-authored GitHub issues into isolated agent runs and
-reviewable pull requests.
-
-**That service is infrastructure, not the project.** It exists to help build Rosetta. It is
-temporary and self-destructs on schedule. When this repository says "Rosetta," it means the
-verification system described above — not the orchestrator.
-
-See [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) for how to run it.
-
----
-
----
-
 ## What works today
 
 Verified on this machine against a live WorldVistA container. Commands are runnable.
@@ -89,28 +73,6 @@ The hard rules that protect every published number:
 - Always `clean_state()` around execution.
 - Never rewrite `data/tasks/split.lock.json`.
 - Don't re-propose an approach already rejected in `docs/PROJECT.md` §5.
-
-## Running the orchestrator
-
-Requirements: macOS, Git, GitHub CLI authenticated with repository access, and Codex CLI
-authenticated with your Codex account.
-
-```bash
-python3 orchestration/orchestrator.py doctor
-python3 orchestration/orchestrator.py setup-github
-python3 orchestration/orchestrator.py install
-```
-
-Assign work through **Issues → New issue**, choosing a Builder, Research, or Review agent
-task. Submitting the form applies `agent:ready`, which is the assignment signal.
-
-The installation is intentionally temporary. A one-shot LaunchAgent permanently removes the
-background service and all of its runtime state three days after installation; it does not
-delete this repository.
-
-The polling service is currently **disabled** (`launchctl disable`). It had been running from
-a second, stale checkout and opening pull requests from an eleven-commit-old base. Re-enable
-with `launchctl enable` only after confirming which checkout its plist points at.
 
 ## Website
 
