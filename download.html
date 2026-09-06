@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Download Rosetta. One command, Python 3.11+, no dependencies. Verify the checksum before you install, and read the installer first if you would rather.">
+  <meta name="theme-color" content="#eeeee7">
+  <meta property="og:title" content="Download Rosetta">
+  <meta property="og:description" content="One command. Python 3.11+. No dependencies. Checksums published with every release.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://travis-hodges.github.io/Rosetta/og.png">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./src/styles.css">
+  <title>Download — Rosetta</title>
+</head>
+<body class="page-download">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <a class="wordmark" href="./index.html" aria-label="Rosetta home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>ROSETTA</a>
+  <nav id="site-nav" aria-label="Main navigation"><a href="./index.html#perspective">The problem</a><a href="./index.html#workflow">The approach</a><a href="./index.html#languages">Languages</a><a href="./index.html#evals">Evals</a></nav>
+  <div class="header-actions"><a class="header-cta" href="https://github.com/travis-hodges/Rosetta" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a><button id="menu-toggle" class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav">Menu <span aria-hidden="true">+</span></button></div>
+</header>
+
+<main id="main" class="download-page">
+
+<section class="section-pad" aria-labelledby="download-title">
+  <div class="section-kicker mono"><span>01 / GET IT ON YOUR MACHINE</span><span>PYTHON 3.11+ · NO DEPENDENCIES</span></div>
+  <div class="section-heading">
+    <h2 id="download-title" class="reveal">Download<br><em>Rosetta.</em></h2>
+    <p>The tool is pure Python with no third-party dependencies. It installs into your
+    home directory, never asks for <code>sudo</code>, and never edits your shell profile.</p>
+  </div>
+
+  <div id="release-panel" class="release-panel">
+    <div class="release-pending">
+      <span class="mono"><i class="status-dot"></i> LOADING RELEASE DETAILS</span>
+      <p>If this does not resolve, JavaScript is disabled or the release manifest is
+      unavailable. The source-checkout instructions further down need neither.</p>
+    </div>
+  </div>
+  <p class="copy-status mono" id="copy-status" role="status" aria-live="polite"></p>
+</section>
+
+<section class="section-pad alt-band" aria-labelledby="verify-title">
+  <div class="section-kicker mono"><span>02 / TRUST, BUT VERIFY</span><span>RECOMMENDED</span></div>
+  <div class="section-heading">
+    <h2 id="verify-title">Read it<br><em>before you run it.</em></h2>
+    <p>Piping a script from the internet into a shell is trust on first use. The
+    checksum protects the payload, not the installer. So here is the two-step form,
+    presented as an equal option rather than a footnote.</p>
+  </div>
+  <div class="quickstart">
+    <div class="command-row"><div><span class="mono">01 / FETCH THE INSTALLER</span><code data-origin-command="curl -fsSLO {origin}/install.sh">curl -fsSLO /install.sh</code></div><button type="button" data-copy="" aria-label="Copy the fetch command">Copy</button></div>
+    <div class="command-row"><div><span class="mono">02 / READ IT, THEN RUN IT</span><code>less install.sh &amp;&amp; sh install.sh</code></div><button type="button" data-copy="less install.sh &amp;&amp; sh install.sh" aria-label="Copy the read and run command">Copy</button></div>
+    <p class="fine-print">The installer verifies the release tarball against the
+    <code>SHA256SUMS</code> published with it and refuses to install on a mismatch. It
+    prints both digests when that happens.</p>
+  </div>
+</section>
+
+<section class="section-pad" aria-labelledby="requirements-title">
+  <div class="section-kicker mono"><span>03 / WHAT IT NEEDS</span><span>AND WHAT IT DOES NOT</span></div>
+  <div class="section-heading">
+    <h2 id="requirements-title">Three payloads,<br><em>three owners.</em></h2>
+    <p>Conflating these is the main way installing Rosetta goes wrong. Only the first
+    two come from us.</p>
+  </div>
+  <div class="payload-grid">
+    <article>
+      <span class="mono">01 / THE TOOL</span>
+      <h3>~900 KB</h3>
+      <p>The CLI, the verifier and the MCP server. Pure Python, zero third-party
+      dependencies, Python 3.11 or newer. This is what the installer fetches.</p>
+    </article>
+    <article>
+      <span class="mono">02 / THE DATA</span>
+      <h3>5.5 MB</h3>
+      <p>Real VistA MUMPS routines, the frozen benchmark split, task sets and the
+      FileMan dictionary extract. Ships inside the same tarball, so a fresh install
+      works with no second download.</p>
+    </article>
+    <article>
+      <span class="mono">03 / THE RUNTIME</span>
+      <h3>Multi-GB</h3>
+      <p>YottaDB inside a WorldVistA container, pulled from its publisher by
+      <code>scripts/bootstrap.sh</code>. Never redistributed here. Install succeeds
+      without it.</p>
+    </article>
+  </div>
+  <div class="evidence-note"><span class="status-dot"></span><p><code>rosetta demo</code> and <code>rosetta doctor</code> are built to run with no container and no network, so you can see the thesis before provisioning anything.</p><a href="https://github.com/travis-hodges/Rosetta/blob/main/docs/WORKFLOWS.md" target="_blank" rel="noreferrer">Read the workflows ↗</a></div>
+</section>
+
+<section class="section-pad alt-band" aria-labelledby="source-title">
+  <div class="section-kicker mono"><span>04 / FROM SOURCE</span><span>NO INSTALLER REQUIRED</span></div>
+  <div class="section-heading">
+    <h2 id="source-title">Or clone it<br><em>and skip all this.</em></h2>
+    <p>The installer is a convenience. A checkout plus the launcher script does the
+    same thing with nothing downloaded from a release.</p>
+  </div>
+  <div class="quickstart">
+    <div class="command-row"><div><span class="mono">01 / CLONE</span><code>git clone https://github.com/travis-hodges/Rosetta.git</code></div><button type="button" data-copy="git clone https://github.com/travis-hodges/Rosetta.git" aria-label="Copy the clone command">Copy</button></div>
+    <div class="command-row"><div><span class="mono">02 / INSTALL THE LAUNCHER</span><code>bash scripts/install.sh --bin-dir ~/.local/bin</code></div><button type="button" data-copy="bash scripts/install.sh --bin-dir ~/.local/bin" aria-label="Copy the launcher install command">Copy</button></div>
+    <div class="command-row"><div><span class="mono">03 / CHECK THE MACHINE</span><code>rosetta doctor</code></div><button type="button" data-copy="rosetta doctor" aria-label="Copy the doctor command">Copy</button></div>
+    <p class="fine-print">The launcher resolves the checkout from its own location, so
+    <code>rosetta</code> works from any directory. Keep the checkout where it is, or
+    reinstall the launcher after moving it.</p>
+  </div>
+</section>
+
+<section class="section-pad" aria-labelledby="uninstall-title">
+  <div class="section-kicker mono"><span>05 / LEAVING</span><span>ONE COMMAND</span></div>
+  <div class="section-heading">
+    <h2 id="uninstall-title">Removing it<br><em>is one command.</em></h2>
+    <p>Versions are unpacked under <code>~/.local/share/rosetta/</code> and the launcher
+    is a single file. Nothing else is touched, so nothing else needs cleaning up.</p>
+  </div>
+  <div class="quickstart">
+    <div class="command-row"><div><span class="mono">01 / UNINSTALL</span><code>sh install.sh --uninstall</code></div><button type="button" data-copy="sh install.sh --uninstall" aria-label="Copy the uninstall command">Copy</button></div>
+    <p class="fine-print">A <code>rosetta</code> launcher the installer did not create is
+    left alone rather than deleted. The container, if you provisioned one, is removed
+    with <code>docker rm -f rosetta-verify</code>.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer"><div class="footer-top"><a class="wordmark" href="./index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>ROSETTA</a><p>A new chapter for old code.</p><a href="./slideshow/">Slideshow ↗</a><a href="https://github.com/travis-hodges/Rosetta" target="_blank" rel="noreferrer">GitHub ↗</a><a href="./index.html">Back to the front page</a></div><div class="footer-word" aria-hidden="true">ROSETTA</div><div class="footer-bottom mono"><span>OBSCURE LANGUAGES. CLEARER POSSIBILITIES.</span><span>AN INDEPENDENT PROJECT · NO GOVERNMENT AFFILIATION IMPLIED</span></div></footer>
+<script type="module" src="./src/download.js"></script>
+</body>
+</html>
