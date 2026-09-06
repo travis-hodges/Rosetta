@@ -4,7 +4,7 @@ Before this module there were eleven entry points (``python3 -m
 rosetta.core.selftest``, ``python3 -m rosetta.bench.build``, ``python3 -m
 rosetta.train.sft``, ...) and no way to tell from the outside which one you
 wanted. The modules were fine; the surface was the problem. This file adds no
-capability. It names the five workflows in the words a user would use, and
+capability. It names the workflows in the words an operator would use, and
 every command ends by printing the next one.
 
     rosetta                     open the Rosetta TUI in the current project
@@ -15,7 +15,6 @@ every command ends by printing the next one.
     rosetta model add ...       bring your own model
     rosetta bench run           measure a model on the held-out eval set
     rosetta train sft           turn verified work into training data
-    rosetta gui                 optional browser view over the same workflows
 
 Two rules this module keeps, because it is the first thing anyone touches:
 
@@ -46,14 +45,15 @@ from rosetta import __version__
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ROOT = REPO_ROOT  # compatibility for source-install callers
 
-# The five workflows, in the order they are usually met. The status command
+# The workflows, ordered around the primary editor experience. The status command
 # prints this, and it is the same order used in docs/WORKFLOWS.md.
 WORKFLOWS: tuple[tuple[str, str, str], ...] = (
-    ("edit", "Change a routine, verified", "rosetta edit DPTLK --request '...'"),
-    ("verify", "Check a change you already made", "rosetta verify DPTLK -c new.m"),
-    ("model", "Bring your own model", "rosetta model add my-model provider/id"),
-    ("bench", "Measure a model on held-out tasks", "rosetta bench run --model my-model"),
-    ("train", "Turn verified work into training data", "rosetta train sft"),
+    ("change", "Plan and apply an operational database change", "rosetta change --help"),
+    ("db", "Inspect, preview, apply, and roll back database state", "rosetta db --help"),
+    ("fileman", "Create or update validated VistA content", "rosetta fileman --help"),
+    ("edit", "Refactor one routine with equivalence proof", "rosetta edit DPTLK --request '...'"),
+    ("verify", "Run final regression evaluation", "rosetta verify DPTLK -c new.m"),
+    ("bench", "Benchmark an editor or model on held-out tasks", "rosetta bench run --model NAME"),
 )
 
 
@@ -196,6 +196,10 @@ def cmd_tui(args: argparse.Namespace) -> int:
         env["ROSETTA_PROJECT_DIR"] = str(project)
         env["ROSETTA_HOME"] = str(REPO_ROOT)
         env["ROSETTA_PYTHON"] = sys.executable
+        # The Rosetta theme lives beside its shipped agents and commands. The
+        # TUI can open any target project, so make that source directory
+        # discoverable without copying a theme into the operator's home.
+        env.setdefault("OPENCODE_CONFIG_DIR", str(REPO_ROOT / ".opencode"))
         tui_config = REPO_ROOT / ".opencode" / "tui.json"
         if not tui_config.is_file():
             raise ValueError(
@@ -404,8 +408,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(_yes("opencode on PATH") if shutil.which("opencode")
           else _no("opencode not on PATH — needed to drive any model"))
 
-    _next("rosetta               # open the primary TUI in this project",
-          "rosetta gui           # optional browser view",
+    _next("rosetta               # open the editor TUI in this project",
+          "rosetta change -m '...' --set REF VALUE",
           "rosetta doctor        # check the verifier can actually run",
           "rosetta demo          # the side-by-side, offline, 60 seconds")
     return 0
@@ -459,11 +463,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 def cmd_edit(args: argparse.Namespace) -> int:
-    """Propose, verify, repair — until the verifier says equivalent.
-
-    The loop itself lives in :mod:`rosetta.workflow` so the GUI cannot drift
-    away from it. This function is presentation and nothing else.
-    """
+    """Propose, verify, repair — until the verifier says equivalent."""
     from rosetta import models as model_registry
     from rosetta.workflow import WorkflowError, edit
 
@@ -523,6 +523,179 @@ def cmd_edit(args: argparse.Namespace) -> int:
     print("     The routine on disk is untouched: applying it is your call.")
     _next(f"cp {_rel(out_path)} data/routines/{routine}.m   # apply it",
           f"rosetta verify {routine} -c {_rel(out_path)}   # re-check independently")
+    return 0
+
+
+# --------------------------------------------------------------------------
+# Primary workflow — intentional database change
+# --------------------------------------------------------------------------
+
+def _database_mutations(args: argparse.Namespace) -> list[Any]:
+    from rosetta.database import Mutation
+
+    out: list[Mutation] = []
+    for pair in getattr(args, "sets", []) or []:
+        out.append(Mutation("set", pair[0], pair[1]))
+    for ref in getattr(args, "kills", []) or []:
+        out.append(Mutation("kill", ref))
+    return out
+
+
+def _print_database_preview(preview: dict[str, Any]) -> None:
+    print(f"request   {preview['request']}")
+    print(f"target    {preview['target']['container']} / {preview['target']['instance']}")
+    print(f"status    {'READY TO APPLY' if preview['ready'] else 'STALE — RECAPTURE REQUIRED'}")
+    for row in preview["operations"]:
+        before = row["before"]
+        after = row["after"]
+        before_text = repr(before.get("value")) if before["present"] else "<absent>"
+        after_text = repr(after.get("value")) if after["present"] else "<absent>"
+        pin = "ok" if row["precondition_matches"] else "CONFLICT"
+        print(f"  {pin:8} {row['ref']}  {before_text} -> {after_text}")
+
+
+def _capture_database_plan(args: argparse.Namespace) -> int:
+    from rosetta.core.runtime import Runtime
+    from rosetta.database import DatabaseChangeError, capture_plan, write_artifact
+
+    try:
+        with Runtime() as runtime:
+            plan = capture_plan(
+                args.request,
+                _database_mutations(args),
+                runtime,
+                title=getattr(args, "title", "") or "",
+            )
+        path = write_artifact(plan, getattr(args, "out", None))
+    except (DatabaseChangeError, OSError, RuntimeError, ValueError) as exc:
+        return _fail(str(exc))
+    _head("database change captured")
+    print(_yes(f"plan written to {_rel(path)}"))
+    print(f"     {len(plan['operations'])} exact node operation(s)")
+    print(f"     target {plan['target']['container']} / {plan['target']['instance']}")
+    print("     Current values are pinned; a concurrent change will block apply.")
+    _next(f"rosetta db preview {_rel(path)}", f"rosetta db apply {_rel(path)} --yes")
+    return 0
+
+
+def cmd_change(args: argparse.Namespace) -> int:
+    """Outcome-first alias for capturing a persistent database change plan."""
+    return _capture_database_plan(args)
+
+
+def cmd_db(args: argparse.Namespace) -> int:
+    """Inspect and manage explicit persistent YottaDB state changes."""
+    from rosetta.core.runtime import Runtime
+    from rosetta.database import (
+        DatabaseChangeError,
+        apply_plan,
+        artifact_dir,
+        load_json,
+        preview_plan,
+        rollback_receipt,
+        validate_ref,
+        write_artifact,
+    )
+
+    if args.db_cmd == "plan":
+        return _capture_database_plan(args)
+    if args.db_cmd == "history":
+        paths = sorted(artifact_dir().glob("*.json"), reverse=True)
+        if not paths:
+            print("No database change artifacts yet.")
+            return 0
+        for path in paths:
+            print(path)
+        return 0
+
+    try:
+        if args.db_cmd == "get":
+            refs = [validate_ref(ref) for ref in args.refs]
+            with Runtime() as runtime:
+                values = runtime.read_globals(refs)
+            if args.json:
+                print(json.dumps({ref: {"present": present, **({"value": value} if present else {})}
+                                  for ref, (present, value) in values.items()}, indent=2))
+            else:
+                for ref in refs:
+                    present, value = values[ref]
+                    print(f"{ref}\t{value if present else '<absent>'}")
+            return 0
+
+        if args.db_cmd == "status":
+            with Runtime() as runtime:
+                status = runtime.database_status()
+            if args.json:
+                print(json.dumps(status, indent=2))
+            else:
+                for key, value in status.items():
+                    print(f"{key:22} {value}")
+                if int(status["attached_m_processes"]) > 8:
+                    print("warning                many M processes are attached; online snapshots may be slow")
+            return 0
+
+        document = load_json(args.path)
+        if args.db_cmd == "preview":
+            with Runtime() as runtime:
+                preview = preview_plan(document, runtime)
+            if args.json:
+                print(json.dumps(preview, indent=2, ensure_ascii=False))
+            else:
+                _print_database_preview(preview)
+            return 0 if preview["ready"] else 1
+
+        if not args.yes:
+            action = ("apply this persistent change" if args.db_cmd == "apply"
+                      else "atomically restore the plan's exact before-state")
+            return _fail(f"refusing to {action} without --yes")
+
+        if args.db_cmd == "apply":
+            print("snapshot  capturing the full database before persistent apply...")
+            with Runtime() as runtime:
+                receipt = apply_plan(document, runtime)
+            path = write_artifact(receipt, args.receipt)
+            _head("change applied")
+            print(_yes(f"persistent database change verified on {receipt['target']['container']}"))
+            print(f"     receipt {_rel(path)}")
+            print(f"     rollback snapshot {receipt['snapshot_id']}")
+            _next(f"rosetta db rollback {_rel(path)} --yes")
+            return 0
+
+        if args.db_cmd == "rollback":
+            print("rollback  atomically restoring the exact pinned before-state...")
+            with Runtime() as runtime:
+                result = rollback_receipt(document, runtime)
+            path = write_artifact(result, args.receipt)
+            _head("change rolled back")
+            print(_yes("pre-change database state restored and verified"))
+            print(f"     receipt {_rel(path)}")
+            return 0
+    except (DatabaseChangeError, OSError, RuntimeError, ValueError) as exc:
+        return _fail(str(exc))
+    return _fail(f"unsupported database command {args.db_cmd!r}")
+
+
+def cmd_fileman(args: argparse.Namespace) -> int:
+    """Create or update one FileMan record persistently."""
+    from rosetta.core.runtime import Runtime
+    from rosetta.fileman import FileManError, apply_record
+
+    try:
+        fields = dict(args.fields)
+        if len(fields) != len(args.fields):
+            return _fail("duplicate --field numbers are not allowed")
+        with Runtime() as runtime:
+            result = apply_record(args.file, fields, runtime, ien=args.ien)
+    except (FileManError, OSError, RuntimeError, ValueError) as exc:
+        return _fail(str(exc))
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        action = "created" if args.ien is None else "updated"
+        print(_yes(f"FileMan {action} file #{result['file']} IEN {result['ien']}"))
+        for field, value in result["fields"].items():
+            print(f"  {field:>8}  {value}")
+        print("     Persistent result reread through FileMan.")
     return 0
 
 
@@ -779,13 +952,6 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     return _fail(f"unknown mcp subcommand {args.mcp_cmd!r}")
 
 
-def cmd_gui(args: argparse.Namespace) -> int:
-    """The browser surface. Same workflows, same verdicts, loopback only."""
-    from rosetta.gui.server import serve
-
-    return serve(args.host, args.port, open_browser=not args.no_open)
-
-
 def cmd_selftest(args: argparse.Namespace) -> int:
     return _delegate("rosetta.core.selftest", list(args.extra),
                      ["rosetta demo", "rosetta edit ROUTINE --request '...'"])
@@ -914,7 +1080,7 @@ def _positive_seconds(value: str) -> float:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="rosetta",
-        description="Verified modification of code nobody can read.",
+        description="TUI editor for legacy code and persistent FileMan content.",
         epilog="Run `rosetta` with no arguments to open the TUI in this project.",
     )
     ap.add_argument("--plain", action="store_true", help="no banner")
@@ -952,6 +1118,49 @@ def build_parser() -> argparse.ArgumentParser:
             type=_positive_seconds,
             help="prompt time limit in seconds (default 300; requires --prompt)",
         )
+
+    def database_plan_args(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--request", "-m", required=True,
+                            help="the operational outcome in plain language")
+        parser.add_argument("--title", default="", help="short change title")
+        parser.add_argument("--set", dest="sets", action="append", nargs=2,
+                            metavar=("REF", "VALUE"), default=[],
+                            help="set one exact global node; repeat as needed")
+        parser.add_argument("--kill", dest="kills", action="append", default=[],
+                            metavar="REF", help="remove one leaf global node")
+        parser.add_argument("--out", help="plan path (default: .rosetta/changes)")
+
+    p = sub.add_parser("change", help="capture an intentional persistent database change")
+    database_plan_args(p)
+
+    p = sub.add_parser("db", help="inspect, preview, apply, and roll back database state")
+    dsub = p.add_subparsers(dest="db_cmd", required=True)
+    s = dsub.add_parser("status", help="show active database target and snapshot health")
+    s.add_argument("--json", action="store_true")
+    g = dsub.add_parser("get", help="read exact global nodes")
+    g.add_argument("refs", nargs="+")
+    g.add_argument("--json", action="store_true")
+    database_plan_args(dsub.add_parser("plan", help="capture current state into a change plan"))
+    v = dsub.add_parser("preview", help="check plan preconditions without writing")
+    v.add_argument("path")
+    v.add_argument("--json", action="store_true")
+    a = dsub.add_parser("apply", help="snapshot and atomically persist a plan")
+    a.add_argument("path")
+    a.add_argument("--yes", action="store_true", help="authorize persistent database mutation")
+    a.add_argument("--receipt", help="receipt path")
+    r = dsub.add_parser("rollback", help="restore exact before-state; retain full snapshot as fallback")
+    r.add_argument("path")
+    r.add_argument("--yes", action="store_true", help="authorize the guarded inverse mutation")
+    r.add_argument("--receipt", help="rollback receipt path")
+    dsub.add_parser("history", help="list plans and receipts in this project")
+
+    p = sub.add_parser("fileman", help="persistently create or update a FileMan record")
+    p.add_argument("--file", required=True, help="FileMan file number")
+    p.add_argument("--ien", help="existing top-level IEN; omit to create")
+    p.add_argument("--field", dest="fields", action="append", nargs=2,
+                   metavar=("FIELD", "VALUE"), required=True,
+                   help="external FileMan field value; repeat as needed")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("edit", help="change a routine with the verifier in the loop")
     p.add_argument("routine")
@@ -1022,11 +1231,6 @@ def build_parser() -> argparse.ArgumentParser:
     s = xsub.add_parser("serve", help="run the server on stdio")
     _remainder(s, "rosetta.tools.server")
 
-    p = sub.add_parser("gui", help="the same five workflows in a browser")
-    p.add_argument("--port", type=int, default=7391)
-    p.add_argument("--host", default="127.0.0.1", help="loopback addresses only")
-    p.add_argument("--no-open", action="store_true", help="do not open a browser")
-
     p = sub.add_parser("selftest", help="prove the verifier works on this machine")
     _remainder(p, "rosetta.core.selftest")
 
@@ -1051,13 +1255,15 @@ _HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "code": cmd_tui,
     "status": cmd_status,
     "doctor": cmd_doctor,
+    "change": cmd_change,
+    "db": cmd_db,
+    "fileman": cmd_fileman,
     "edit": cmd_edit,
     "verify": cmd_verify,
     "model": cmd_model,
     "bench": cmd_bench,
     "train": cmd_train,
     "demo": cmd_demo,
-    "gui": cmd_gui,
     "mcp": cmd_mcp,
     "selftest": cmd_selftest,
     "models": cmd_models,

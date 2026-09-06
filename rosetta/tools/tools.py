@@ -1,9 +1,9 @@
-"""The eight Rosetta tools, with the schemas and descriptions a model reads.
+"""The eight analysis and evaluation tools inside the Rosetta editor.
 
 Every ``description`` below is written for a reader who has never seen MUMPS.
 That is not politeness: the description *is* the prompt. A model that does not
-know what a "global" is will not call ``resolve_global``, and the tools-on arm
-of the benchmark measures exactly that.
+know what a "global" is will not call ``resolve_global`` while preparing a
+change, and the tools-on arm of the benchmark measures exactly that.
 
 Five tools are static and work with no runtime at all:
 ``list_routines``, ``read_routine``, ``parse_routine``, ``call_graph``,
@@ -167,7 +167,7 @@ def _backend_error(exc: BackendUnavailable, tool: str, **extra: Any) -> ToolErro
 
 
 class ToolRegistry:
-    """Holds the eight tools and the collaborators they need.
+    """Holds the editor's analysis/evaluation tools and their collaborators.
 
     Every dependency is injectable so the whole surface is testable without a
     container, a database, or a network.

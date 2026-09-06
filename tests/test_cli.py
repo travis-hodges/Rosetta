@@ -87,10 +87,17 @@ class ParserTests(unittest.TestCase):
         for name in actions[0].choices:
             self.assertIn(name, _HANDLERS, f"{name} has no handler")
 
-    def test_help_mentions_the_five_workflows(self) -> None:
+    def test_help_mentions_the_product_workflows(self) -> None:
         text = build_parser().format_help()
         for name, _blurb, _example in WORKFLOWS:
             self.assertIn(name, text)
+
+    def test_browser_gui_is_not_a_product_surface(self) -> None:
+        ap = build_parser()
+        actions = [a for a in ap._actions if getattr(a, "choices", None)
+                   and getattr(a, "dest", None) == "cmd"]
+        self.assertNotIn("gui", actions[0].choices)
+        self.assertFalse((Path(__file__).resolve().parents[1] / "rosetta" / "gui").exists())
 
 
 class ModelRegistryTests(unittest.TestCase):

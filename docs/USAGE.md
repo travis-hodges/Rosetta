@@ -20,10 +20,16 @@ The default model ID remains `opencode/big-pickle`, but Rosetta presents it as
 **Translator 1.0** in the product UI. This is a display identity, not evidence
 of MUMPS specialization; benchmark it before making a capability claim.
 
-Inside the TUI, use `/start` for orientation or `/pipeline REQUEST` for the
-full **UNDERSTAND → CHANGE → PROVE** workflow. `/routine`, `/globals`, and
-`/verify` expose its major stages. `/evaluate`, `/doctor`, `/benchmark`,
-`/report`, `/train`, and `/demo` are supporting services.
+Inside the TUI, use `/start` for orientation, `/change REQUEST` for an
+outcome-first code change, or `/database REQUEST` for a persistent database
+change. `/routine` and `/globals` provide discovery; `/verify` and `/evaluate`
+are the final proof gates. `/doctor`, `/benchmark`, `/report`, `/train`, and
+`/demo` are supporting services.
+
+When that prompt requests FileMan-managed content, Rosetta can create or update
+one top-level record immediately through `UPDATE^DIE` or `FILE^DIE`. The TUI
+agent resolves the file, IEN, and field numbers, calls `rosetta fileman`, and
+reports FileMan's returned IEN and reread values without a second approval step.
 
 `/demo` is the shortest judge-facing path. It executes a real VistA MUMPS
 routine on YottaDB, visibly moves through isolation, execution, divergence,

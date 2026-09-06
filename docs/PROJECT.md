@@ -4,23 +4,41 @@
 
 ## Current product direction — September 6, 2026
 
-Rosetta is a terminal coding environment for developers working on obscure
-legacy languages. Its primary loop is **UNDERSTAND → CHANGE → PROVE**. For the
-hackathon, that loop is explicitly optimized for VA VistA MUMPS under YottaDB.
+Rosetta is an editor platform for developers operating obscure legacy
+applications **and their databases**. It turns an operational request into a
+controlled code-and-state change through **REQUEST → DISCOVER → CONTRACT →
+EDIT → EVALUATE → SHIP**. For the hackathon, that loop is explicitly optimized
+for VA VistA MUMPS under YottaDB.
 
-The default product surface is the OpenCode-derived TUI: running `rosetta`
-inside a project opens Rosetta Agent, Plan, and Verify modes. The verifier is a
-proof service inside the coding loop; the benchmark measures the improvement
-from that service; model registration and training feed engines back into the
-same loop. They are capabilities of Rosetta, not competing product surfaces.
+The product surface is the OpenCode-derived TUI, backed by local runtime and
+CLI primitives. A user starts with an outcome such as “add this
+facility,” not a routine name. Rosetta discovers affected routines and FileMan
+data, defines the expected state delta and preserved invariants, edits code,
+captures exact database operations against current values, previews conflicts,
+and produces a persistent change with rollback evidence.
+
+The verifier is the editor's final-evaluation engine. Equivalence proves
+behavior that must remain unchanged; it does **not** define success for an
+intentional feature. Benchmarking measures editor/model performance, and model
+registration and training feed engines back into the editor. They are
+supporting capabilities, not competing product surfaces.
+
+Database changes use content-addressed plans. Every plan names the target
+container and instance, pins the before-value of each exact global node, and is
+previewable without writes. Apply requires explicit authorization, captures a
+complete MUPIP snapshot, rechecks all preconditions, commits atomically, checks
+the persistent after-state, and emits a rollback receipt. Direct global edits
+are a low-level mechanism. Rosetta's proof-of-concept FileMan path creates
+top-level records through `UPDATE^DIE` and updates them through `FILE^DIE`, so
+FileMan validates external values and maintains the record's indexes.
 
 MUMPS/YottaDB is implemented. Other runtime adapters and trained specialist
 weights are not shipped. See [README](../README.md) and [USAGE](USAGE.md) for
 current commands.
 
-The sections below preserve the original hackathon research and plan. Their schedule,
+The sections below preserve the original verifier-first hackathon research and plan. Their schedule,
 prior measurements, and model-first rejection describe that historical build sequence;
-they do not override the current product direction. The frozen core contract and split
+they do not override the editor-first product direction. The frozen core contract and split
 lock remain protected. Current benchmark generation disables agent tools and measures
 no-feedback versus harness-feedback repair, preventing direct access to reference source.
 It does not yet measure autonomous MCP tool use.

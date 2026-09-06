@@ -62,6 +62,9 @@ DISPATCH N CMD
  I CMD="EXEC" D EXEC Q
  I CMD="TRIG" D TRIG Q
  I CMD="COUNT" D COUNT Q
+ I CMD="GETG" D GETG Q
+ I CMD="APPLYG" D APPLYG Q
+ I CMD="FILEMAN" D FILEMAN Q
  I CMD="KILLG" D KILLG Q
  I CMD="RESET" D RESET Q
  D RESP("STATUS","ERR"),RESP("ERROR","unknown command: "_CMD)
@@ -156,6 +159,65 @@ KILLG ; KILL global roots outside any transaction
  I $TLEVEL>0 TROLLBACK
  F I=1:1:+$G(ROSREQ("REF")) S R=$$RQ("REF",I) I R'="" K @R
  D RESP("STATUS","OK")
+ Q
+ ;
+GETG ; read exact global nodes outside a transaction
+ N I,R,P
+ I $TLEVEL>0 TROLLBACK
+ F I=1:1:+$G(ROSREQ("REF")) D
+ . S R=$$RQ("REF",I),P=$D(@R)#10
+ . D RESP("GR",R),RESP("GP",P),RESP("GV",$S(P:$G(@R),1:""))
+ D RESP("STATUS","OK")
+ Q
+ ;
+APPLYG ; atomically commit exact global-node mutations
+ N I,N,R,OP,V,BP,BV,P,BAD
+ I $TLEVEL>0 TROLLBACK
+ S N=+$G(ROSREQ("REF")),BAD=0
+ I N<1 D RESP("STATUS","ERR"),RESP("ERROR","APPLYG: no operations") Q
+ ; Check every optimistic-lock precondition before changing anything.
+ F I=1:1:N D
+ . S R=$$RQ("REF",I),OP=$$RQ("OP",I),BP=+$$RQ("BEFOREP",I),BV=$$RQ("BEFOREV",I),P=$D(@R)#10
+ . I OP'="SET",OP'="KILL" S BAD=1 D RESP("CONFLICT",R_" (invalid operation)") Q
+ . I P'=BP S BAD=1 D RESP("CONFLICT",R_" (presence changed)") Q
+ . I P,$G(@R)'=BV S BAD=1 D RESP("CONFLICT",R_" (value changed)") Q
+ . I OP="KILL",$D(@R)>1 S BAD=1 D RESP("CONFLICT",R_" (has descendants; subtree deletion refused)")
+ I BAD D RESP("STATUS","CONFLICT") Q
+ ; No customer routine runs here. These literal SET/KILL operations are one
+ ; atomic commit, and Python has already captured a full MUPIP snapshot.
+ TSTART ():SERIAL
+ F I=1:1:N D
+ . S R=$$RQ("REF",I),OP=$$RQ("OP",I),V=$$RQ("VALUE",I)
+ . I OP="SET" S @R=V Q
+ . K @R
+ TCOMMIT
+ F I=1:1:N D
+ . S R=$$RQ("REF",I),P=$D(@R)#10
+ . D RESP("GR",R),RESP("GP",P),RESP("GV",$S(P:$G(@R),1:""))
+ D RESP("STATUS","OK")
+ Q
+ ;
+FILEMAN ; create or update one top-level record through supported DBS APIs
+ N FILE,IENS,I,N,FLD,VAL,NEWIEN,ERR,P,LVL,FDA,DUZ,DT
+ I $TLEVEL>0 TROLLBACK
+ S FILE=$$RQ("FILE"),IENS=$$RQ("IENS"),N=+$G(ROSREQ("FIELD"))
+ I FILE'>0!(IENS="")!(N<1) D RESP("STATUS","ERR"),RESP("ERROR","FILEMAN: file, IENS, and fields are required") Q
+ ; FDA subscripts are data, never executable text. Python validates each one.
+ F I=1:1:N S FLD=$$RQ("FIELD",I),VAL=$$RQ("VALUE",I),FDA(FILE,IENS,FLD)=VAL
+ ; Minimal programmer context for this local proof-of-concept instance.
+ I '$D(DUZ) S DUZ=.5
+ S DUZ(0)="@",DT=$$DT^XLFDT
+ S LVL=$ZLEVEL
+ S $ZTRAP="S ROSST=$ZSTATUS ZGOTO "_LVL_":FMERR^ROSWRK"
+ I $E(IENS)="+" D UPDATE^DIE("E","FDA","NEWIEN","ERR") I '$D(ERR) S IENS=+$G(NEWIEN(1))_","
+ E  D FILE^DIE("ET","FDA","ERR")
+ I $D(ERR("DIERR")) D RESP("STATUS","ERR"),RESP("ERROR",$S($G(ERR("DIERR",1,"TEXT",1))'="":ERR("DIERR",1,"TEXT",1),1:"FileMan rejected the change")) Q
+ I +IENS'>0 D RESP("STATUS","ERR"),RESP("ERROR","FileMan did not return an IEN") Q
+ D RESP("IEN",+IENS)
+ F I=1:1:N S FLD=$$RQ("FIELD",I) D RESP("FIELD",FLD),RESP("VALUE",$$GET1^DIQ(FILE,IENS,FLD,"E"))
+ D RESP("STATUS","OK")
+ Q
+FMERR D RESP("STATUS","ERR"),RESP("ERROR",$$MERR($G(ROSST))),RESP("ZSTATUS",$G(ROSST))
  Q
  ;
 RESET ; return the process to a known state

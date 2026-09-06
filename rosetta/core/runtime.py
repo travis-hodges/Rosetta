@@ -252,6 +252,33 @@ class Runtime:
                  snap_id, len(regions), time.monotonic() - started)
         return snap_id
 
+    def online_snapshot(self) -> str:
+        """Capture a consistent rollback point while editor workers stay live.
+
+        YottaDB's DATABASE ONLINE backup is a point-in-time backup and does
+        not require standalone access. Verification's ``snapshot()`` remains
+        the quiesced repair path; persistent editor changes use this online
+        variant so an open TUI cannot deadlock its own change workflow.
+        """
+        snap_id = f"snap-{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
+        dest = f"{self.config.snapshot_dir}/{snap_id}"
+        if not self.regions():
+            raise WorkerError("no regions discovered; run scripts/bootstrap.sh")
+        command = (
+            f"mkdir -p {shlex.quote(dest)}; "
+            f"source {shlex.quote(self.config.env_file)}; "
+            '"$gtm_dist/mupip" backup -database -online -bkupdbjnl=disable '
+            f"-nonewjnlfiles '*' {shlex.quote(dest + '/')}; "
+            f"touch {shlex.quote(dest + '/.complete')}"
+        )
+        started = time.monotonic()
+        self._sh(
+            f"flock --shared {shlex.quote(self.config.scratch_dir + '/database.lock')} "
+            f"bash -c {shlex.quote('set -e; ' + command)}"
+        )
+        log.info("online snapshot %s captured in %.1fs", snap_id, time.monotonic() - started)
+        return snap_id
+
     def restore(self, snap_id: str) -> None:
         """Restore a completed snapshot with exclusive database access."""
         if not re.fullmatch(r"snap-[0-9]{8}T[0-9]{6}-[a-f0-9]{8}", snap_id):
@@ -312,6 +339,112 @@ class Runtime:
             for path in listing.stdout.split():
                 out.append((Path(path).stem.upper(), path))
         return out
+
+    def database_status(self) -> dict[str, object]:
+        """Operational facts an editor should show before a persistent apply."""
+        regions = self.regions()
+        proc = subprocess.run(
+            [self.config.docker, "exec", "-u", self.config.instance,
+             self.config.container, "bash", "-c",
+             'pgrep -u "$(id -u)" -x mumps | wc -l'],
+            capture_output=True, text=True, timeout=20,
+        )
+        try:
+            attached = int(proc.stdout.strip()) if proc.returncode == 0 else -1
+        except ValueError:
+            attached = -1
+        return {
+            "container": self.config.container,
+            "instance": self.config.instance,
+            "regions": len(regions),
+            "attached_m_processes": attached,
+            "snapshot_mode": "MUPIP DATABASE ONLINE",
+            "persistent_apply": "FileMan DBS API or atomic exact-node transaction",
+        }
+
+    # --------------------------------------------------------- database edit
+
+    def read_globals(self, refs: list[str] | tuple[str, ...]) -> dict[str, tuple[bool, str]]:
+        """Read exact global nodes outside the verifier transaction.
+
+        Reference grammar and authorization live in :mod:`rosetta.database`.
+        The worker receives only validated literal references; this method is
+        intentionally narrow so editor code cannot smuggle arbitrary M into an
+        XECUTE boundary.
+        """
+        if not refs:
+            return {}
+        self.worker.ensure_started()
+        req = Request().add("CMD", "GETG")
+        for ref in refs:
+            req.add("REF", ref)
+        resp = self.worker.send(req, timeout_s=30.0)
+        if not resp.ok:
+            raise WorkerError(resp.get("ERROR") or "database read failed")
+        names = resp.get_all("GR")
+        present = resp.get_all("GP")
+        values = resp.get_all("GV")
+        if not (len(names) == len(present) == len(values) == len(refs)):
+            raise WorkerError("malformed database read response")
+        return {
+            name: (flag == "1", value)
+            for name, flag, value in zip(names, present, values)
+        }
+
+    def apply_global_changes(
+        self, changes: list[dict[str, str]] | tuple[dict[str, str], ...]
+    ) -> dict[str, tuple[bool, str]]:
+        """Atomically commit an explicitly authorized set of exact-node edits.
+
+        This is the persistent counterpart to ``execute()``. It never loads or
+        runs customer source. The M worker first checks every pinned before
+        value, then commits all SET/KILL operations in one transaction. A
+        caller must create a full snapshot before reaching this method.
+        """
+        if not changes:
+            raise ValueError("at least one database change is required")
+        self.worker.ensure_started()
+        req = Request().add("CMD", "APPLYG")
+        for change in changes:
+            req.add("OP", change["op"].upper())
+            req.add("REF", change["ref"])
+            req.add("VALUE", change.get("value", ""))
+            req.add("BEFOREP", change["before_present"])
+            req.add("BEFOREV", change.get("before_value", ""))
+        resp = self.worker.send(req, timeout_s=30.0)
+        if resp.status == "CONFLICT":
+            raise WorkerError(
+                "database precondition failed for "
+                + ", ".join(resp.get_all("CONFLICT"))
+            )
+        if not resp.ok:
+            raise WorkerError(resp.get("ERROR") or "database apply failed")
+        return self.read_globals(tuple(change["ref"] for change in changes))
+
+    def apply_fileman_record(
+        self, file_number: str, iens: str, fields: dict[str, str]
+    ) -> dict[str, object]:
+        """Persist one record through FileMan's supported DBS filer APIs."""
+        if not fields:
+            raise ValueError("at least one FileMan field is required")
+        self.worker.ensure_started()
+        req = (Request().add("CMD", "FILEMAN")
+               .add("FILE", file_number).add("IENS", iens))
+        for field, value in fields.items():
+            req.add("FIELD", field).add("VALUE", value)
+        resp = self.worker.send(req, timeout_s=60.0)
+        if not resp.ok:
+            raise WorkerError(resp.get("ERROR") or "FileMan rejected the change")
+        names, values = resp.get_all("FIELD"), resp.get_all("VALUE")
+        if len(names) != len(values):
+            raise WorkerError("malformed FileMan response")
+        return {
+            "file": file_number,
+            "ien": resp.get("IEN"),
+            "fields": dict(zip(names, values)),
+            "persistent": True,
+            "api": "UPDATE^DIE" if iens.startswith("+") else "FILE^DIE",
+        }
 
     def _sh(self, command: str) -> str:
         proc = subprocess.run(

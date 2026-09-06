@@ -1,15 +1,13 @@
 """The two workflows that need a verifier, expressed once.
 
-`rosetta edit` in a terminal and the Edit view in the GUI have to reach the
-same verdict, or the product has two truths. The only way to guarantee that is
-for both to consume the same generator, so this module owns the loops and the
-front ends own nothing but presentation.
+`rosetta edit` and the TUI editor have to reach the same verdict, or the
+product has two truths. This module owns those shared loops.
 
     for ev in edit("ORCRC", "handle a null array"):
         ...  # kind is one of: source inputs attempt verdict accepted exhausted
 
-Every event is JSON-serialisable, because the GUI puts them on the wire
-untouched. Nothing here prints, and nothing here writes a file: what to do
+Every event is JSON-serialisable so TUI clients and CLI automation can consume
+the same trace. Nothing here prints, and nothing here writes a file: what to do
 with a verified candidate is a decision for the caller and, ultimately, a
 human.
 """

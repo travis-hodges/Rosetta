@@ -34,10 +34,10 @@ Commands:
 |---|---|
 | Command name | `rosetta` on PATH (source-aware launcher in `~/.local/bin`, or beside `opencode`) |
 | Usage output | yargs script name, every command and positional description |
-| Wordmark | new `r s t a` glyphs drawn in OpenCode's own 4×3 block font — plain, shaded, and the two-glyph monogram |
-| TUI home screen | shaded wordmark |
+| Wordmark | new `r s t a` glyphs drawn in OpenCode's own 4×3 block font — plain, single-color, and the two-glyph monogram |
+| TUI home screen | one-color Rosetta wordmark instead of a dim `ro` / bright `setta` split |
 | MUMPS-first prompt | `MUMPS change…` with routine, global, and verification examples |
-| TUI palette | Everforest dark preset, stacked diffs, blinking block cursor |
+| TUI palette | Rosetta charcoal, cream, and lemon theme; stacked diffs; blinking block cursor |
 | Running proof | scanner pulse for executable tools; staged isolate/observe/diverge/replay flight |
 | `--mini` splash | `ro` monogram plus **Rosetta**, and the `rosetta --mini -s <id>` resume hint |
 | Terminal title | `Rosetta` |
@@ -107,7 +107,7 @@ Around that:
 - macOS gets a fresh ad-hoc signature (`codesign --force --sign -`); a modified Mach-O is
   killed on arm64 without one
 - the result is smoke-tested with `--version`, and **auto-reverted** if it fails to run
-- the three wordmark patches are marked required: if a future OpenCode build changes them,
+- all wordmark shape and foreground patches are marked required: if a future OpenCode build changes them,
   the script aborts before writing anything rather than half-patching
 
 ## After an upgrade

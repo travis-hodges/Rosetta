@@ -1,8 +1,8 @@
 # How someone uses Rosetta
 
-Rosetta is one developer pipeline for obscure code, with supporting
-verification, benchmark, model, and training services. For the hackathon, the
-pipeline is optimized for VA VistA MUMPS.
+Rosetta is an editor platform for obscure legacy applications and their
+databases, with supporting final evaluation, benchmark, model, and training
+services. For the hackathon, the platform is optimized for VA VistA MUMPS.
 
 This document is the contract for the *surface*, the way
 [`docs/PROJECT.md`](PROJECT.md) §7 is the contract for the *core*. It does not
@@ -19,40 +19,35 @@ described as working that does not work.
 ## The one-screen model
 
 ```
- developer request
+ operational request
         │
         ▼
-  UNDERSTAND ───────▶ CHANGE ───────▶ PROVE
-  Rosetta Plan       Rosetta Agent    Rosetta Verify
-  routines/calls     smallest edit    output + database state
-        │                 │                    │
-        └─────────────────┴──────────┬─────────┘
-                                    ▼
-                        verifier service
-                        benchmark evidence
-                        training artifacts
+ DISCOVER ─▶ CONTRACT ─▶ EDIT ─▶ EVALUATE ─▶ SHIP
+ code + DB    expected     code    intended +   package +
+ impact       state delta  + DB    preserved    rollback
+        │                    │          │
+        └────────────────────┴──────────┘
+                             ▼
+                 executable evaluator
+                 benchmark + training lab
 ```
 
-The coding environment is the product. The verifier provides ground truth
-inside that environment. The benchmark measures whether access to that proof
-service improves the model. Model registration and training feed better
-engines back into the same pipeline.
+The editor and database change workspace are the product. The verifier provides
+ground truth at the final evaluation gate. The benchmark measures whether the
+editor and its tools improve the engine. Model registration and training feed
+better engines back into the same platform.
 
 The default surface and its supporting entry points are the same underneath:
 
 | | What it is | State |
 |---|---|---|
-| **TUI** | bare `rosetta`: Rosetta Agent, Plan, and Verify modes plus MUMPS tools | **live** |
-| **Standalone CLI** | `rosetta edit`, `verify`, `model`, `bench` and `train` | **live** |
+| **TUI** | bare `rosetta`: operational changes, code editing, database work, and evaluation | **live** |
+| **Standalone CLI** | `rosetta change`, `db`, `edit`, `verify`, `bench`, model and training commands | **live** |
 | **Editor / agent host** | the MCP server, 8 tools, `rosetta mcp serve` | **live** |
-| **Browser view** | `rosetta gui`, the same five workflows in a browser | **live** |
 
-None of these is a separate implementation. `rosetta edit`, the Edit view and
-an agent in OpenCode all consume the same generators in
-[`rosetta/workflow.py`](../rosetta/workflow.py) and call the identical
-`verify_change`, so a verdict reached in a browser, in an editor, and on the
-benchmark is the same verdict. The front ends own presentation and nothing
-else — the GUI computes exactly one number of its own, an elapsed-time clock.
+None of these is a separate product. The TUI and standalone commands consume
+the same implementation in [`rosetta/workflow.py`](../rosetta/workflow.py),
+[`rosetta/database.py`](../rosetta/database.py), and `rosetta.core`.
 
 ---
 
@@ -73,8 +68,9 @@ the project.
 The first screen says `MUMPS change…` and starts with **Translator 1.0**.
 Press Tab to cycle through **Rosetta Agent**, **Rosetta Plan**, and **Rosetta
 Verify**—Rosetta itself never turns off. Use `/start` for a short capability
-orientation or `/pipeline REQUEST` for the complete
-**UNDERSTAND → CHANGE → PROVE** loop. Type `/` for the supporting services.
+orientation, `/change REQUEST` for an intentional code-and-database change, or
+`/pipeline REQUEST` for a focused code workflow. Type `/` for the supporting
+services.
 
 For a panel, `/demo` is the compact proof of the thesis. It attempts a fresh,
 bounded YottaDB flight on real VA code, animates the actual proof stages in the
@@ -92,24 +88,55 @@ by the command that needs it.
 four questions in order — python, verifier, model access, data — and stops
 guessing after the first `--`.
 
-For the browser surface:
+## 1. Change database state — `rosetta change` and `rosetta db`
+
+For application content managed by FileMan, the TUI agent uses the direct
+proof-of-concept filer instead of inventing global nodes:
 
 ```bash
-rosetta gui                      # http://127.0.0.1:7391
-rosetta gui --port 8080 --no-open
+rosetta fileman --file 4 --field .01 "NEW FACILITY"              # create
+rosetta fileman --file 4 --ien 21790 --field .01 "RENAMED"       # update
+rosetta fileman --file 4 --ien 21790 --field .01 @               # FileMan delete
 ```
 
-The server binds a loopback interface and refuses anything else. That is not a
-setting: Rosetta is built to run inside an enclave, and a verification tool
-listening on a routable interface there is a finding, not a feature. It serves
-three hand-written files with no remote asset of any kind, so the page opens on
-a machine that has never seen a package index.
+Values are supplied in external FileMan format. Creation calls `UPDATE^DIE`;
+updates call transactional `FILE^DIE`; the command rereads each filed value
+before reporting success. This path intentionally omits the plan/approval
+ceremony for the local proof of concept.
 
----
+**live.** This is the primary operational change primitive.
 
-## 1. Change a routine, verified — `rosetta edit`
+```bash
+rosetta db get '^VA(4,123,0)'
 
-**live.** The workflow the product exists for.
+rosetta change \
+  --request "Update the test facility record" \
+  --set '^VA(4,123,0)' 'NEW VALUE'
+
+rosetta db preview .rosetta/changes/chg-....plan.json
+rosetta db apply .rosetta/changes/chg-....plan.json --yes
+rosetta db rollback .rosetta/changes/chg-....receipt.json --yes
+```
+
+The plan captures current values from the active container and instance. It is
+content-addressed and cannot be edited silently. Preview rereads every node and
+blocks if another operator changed it. Apply captures a full database snapshot,
+rechecks the optimistic-lock preconditions, commits all exact-node SET/KILL
+operations atomically, rereads the persistent after-state, and writes a receipt
+containing the rollback snapshot. Normal rollback is an atomic inverse guarded
+by the applied after-values; the full online snapshot is retained for disaster
+recovery. KILL refuses nodes with descendants.
+
+This low-level editor does not pretend that every VistA record is safe to create
+with raw globals. Top-level FileMan records use `rosetta fileman`, which invokes
+the supported DBS APIs so validation and cross-references run. More complex
+subfiles and application-specific workflows still require a purpose-built
+installation routine. The exact-node workspace remains useful for inspection,
+controlled configuration, and fixtures.
+
+## 2. Refactor a routine, evaluated — `rosetta edit`
+
+**live.** A focused workflow for repairs and behavior-preserving refactors.
 
 ```bash
 rosetta edit ORCRC --request "Handle a null array without erroring" --model opus
@@ -127,15 +154,17 @@ What happens, in order:
    again, up to `--attempts`
 6. on success the candidate is written to a file — never over your routine
 
-The verdict printed is always the harness's, never the model's claim. That
-separation is the product: a model asserting "this is behaviour preserving"
-while the verifier disagrees is the exact failure this catches, and it is what
-the headline metric counts.
+The verdict printed is always the harness's, never the model's claim. This is a
+regression evaluation primitive. An intentional feature needs a change
+contract describing expected divergence; equivalence to the old routine is not
+proof that a new capability works.
 
-Nothing is applied for you. Applying a change to a system people depend on is
-a human decision, and a tool that made it silently would be the wrong tool.
+The generated source candidate is not silently installed over a production
+routine. Database plans, by contrast, can be explicitly applied through the
+Change workspace or `rosetta db apply`, with pinned preconditions, typed
+confirmation, atomic mutation, a receipt, and an exact inverse rollback.
 
-## 2. Bring your own model — `rosetta model`
+## 3. Bring your own model — `rosetta model`
 
 **live.**
 
@@ -161,7 +190,7 @@ Two refusals worth knowing, both because a published number depends on them:
 - `rosetta model test` proves reachability and output format. It does not
   prove competence, and it says so. Competence is measured, not tested.
 
-## 3. Measure it — `rosetta bench`
+## 4. Measure the editor — `rosetta bench`
 
 **live** end to end; **no number is published yet.**
 
@@ -191,7 +220,7 @@ assertion. The gap between the two **is** the false-confidence rate.
 and the site refuses an invalid report and shows a pending state rather than a
 placeholder. There is no way to pass a figure in by hand.
 
-## 4. Improve it — `rosetta train`
+## 5. Improve an engine — `rosetta train`
 
 **partial.** Data generation is live; submission is deliberately absent.
 
@@ -226,7 +255,7 @@ workflow 2 and gets measured by workflow 3, with no new concepts.
 it is MUMPS-specific beyond the runtime it wraps, which is the concrete form of
 the corpus-agnostic claim.
 
-## 5. Check what you wrote — `rosetta verify`
+## 6. Run final regression evaluation — `rosetta verify`
 
 **live.** No model involved. This is the workflow for a human who made an edit
 by hand, and the one that runs in CI.
@@ -258,64 +287,6 @@ the second one can be verified.
 
 ---
 
-## The GUI
-
-**live.** `rosetta gui` serves four views over the same workflows. Nothing in
-the browser can compute a number the CLI cannot reproduce: the front end
-renders what the API returned, and anything statistical is read from
-`results/summary.json`, which only `rosetta bench report` writes.
-
-### Verify — the whole thesis on one screen
-
-Pick a routine and the page immediately reports whether it *can* be verified
-(`134 lines · 12 case(s) from eval_tasks.json`). Finding out that a routine has
-no inputs after writing a candidate is the wrong time to find out.
-
-Paste a rewrite, or drop a `.m` file — a dropped `ORCRC.m` fills in the routine
-name too, because that is what dropping it meant. The verdict banner is the
-verifier's own text, and each divergence expands to the case index, the global
-reference, the `^`-delimited piece, the FileMan field that piece is, and the
-before and after values.
-
-### Edit — the repair loop, made visible
-
-One card per attempt: the model's diff, then the verifier's verdict beneath it,
-in order, with earlier attempts left in place. The pill on each verdict is the
-audit trail — **fed back to the model** or **loop ended here** — because which
-verdicts the model was allowed to see is exactly the difference between the two
-benchmark conditions.
-
-A verified candidate is offered as a download. Nothing is written to
-`data/routines/`, in the browser or the terminal.
-
-Runs are slow and the page says so out loud: a tools-on agent calls
-`verify_change` itself, each call runs the whole case suite against the real
-database, and a single proposal can take ten minutes. Every waiting state
-carries a ticking elapsed clock so that a long run is distinguishable from a
-hung one.
-
-### Models — bring your own
-
-The registry as a two-field form, with the same two refusals as the CLI. **Test**
-runs one live call and reports reachability and output format, labelled as
-exactly that: competence is measured on the held-out eval set, never by a smoke
-test.
-
-### Runs — measured, not asserted
-
-Published results if there are any, and a pending state if there are not — never
-a placeholder. Underneath, the trace files every number came from: file, model,
-conditions, tasks, records. If the view wants a figure that is not in the
-summary, the answer is to run the report, not to average something in
-JavaScript.
-
-**Not built, and not planned:** anything that uploads a customer routine to a
-hosted service. Rosetta never needs to see the customer's code, and that is
-what makes it deployable air-gapped — a convenience that broke it would cost
-more than it returns.
-
----
-
 ## What is deliberately absent
 
 | Not built | Why |
@@ -323,8 +294,7 @@ more than it returns.
 | `rosetta train submit` actually submitting | data leaving the machine is the operator's decision, and air-gapped it cannot |
 | applying a verified candidate to disk | a human decision on a system people depend on |
 | a hosted model or hosted code | the air-gap claim is the deployment story |
-| a published benchmark number | no full run has happened yet; both the site and the Runs view show pending, not a placeholder |
-| a "fine-tune" button in the GUI | same reason as `train submit`: it is a spend decision and an exfiltration decision |
+| a published benchmark number | no full run has happened yet; the TUI reports pending, not a placeholder |
 
 ---
 
@@ -350,4 +320,4 @@ rosetta train sft -- --limit 100
 | `python3 -m rosetta.train.labels` | `rosetta train labels` |
 | `python3 -m rosetta.train.sft` | `rosetta train sft` |
 | `python3 -m rosetta.train.grader` | `rosetta train grader` |
-| — | `rosetta edit`, `rosetta verify`, `rosetta model`, `rosetta gui` (new) |
+| — | `rosetta change`, `rosetta db`, `rosetta edit`, `rosetta verify`, `rosetta model` |

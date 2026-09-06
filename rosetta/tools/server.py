@@ -183,7 +183,7 @@ class RosettaServer:
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {
                 "name": SERVER_NAME,
-                "title": "Rosetta — MUMPS/VistA verification tools",
+                "title": "Rosetta — legacy-system editor tools",
                 "version": SERVER_VERSION,
             },
             "instructions": self._instructions(status),
@@ -209,10 +209,14 @@ class RosettaServer:
             "fields packed into '^'-delimited pieces. Use resolve_global to "
             "learn what any of those pieces mean before changing code that "
             "touches them.\n\n"
-            "Workflow: list_routines -> read_routine -> parse_routine and "
-            "call_graph to see what a change can reach -> resolve_global for the "
-            "data -> verify_change to check your rewrite. verify_change reports "
-            "the specific divergence, not a pass/fail; use it as a repair loop."
+            "Begin with the operator's requested outcome. Use list_routines, "
+            "read_routine, parse_routine, call_graph, and resolve_global to "
+            "discover the affected code and data before editing. FileMan "
+            "content is created or updated with `rosetta fileman`; other "
+            "persistent state uses a captured Rosetta database plan. Use "
+            "verify_change at the final gate for behavior that must remain "
+            "equivalent; intentional feature behavior requires its own change "
+            "contract and must not be erased to satisfy equivalence."
         )
         if not status.get("execution_available"):
             base += (

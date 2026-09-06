@@ -133,7 +133,7 @@ class BrandingFontTests(unittest.TestCase):
         plain = self.branding.rows(self.branding.PLAIN, self.branding.brand)
         self.assertEqual(plain[1:], expected)
 
-        # The TUI draws the wordmark in two halves; joined, they are the same shape.
+        # The TUI stores the shapes in two halves; joined, they are the same shape.
         left = self.branding.rows(self.branding.MARKED, "ro")
         right = self.branding.rows(self.branding.MARKED, "setta")
         joined = [
@@ -141,6 +141,20 @@ class BrandingFontTests(unittest.TestCase):
             for a, b in zip(left, right)
         ]
         self.assertEqual(joined[1:], expected)
+
+    def test_tui_wordmark_uses_one_foreground_treatment(self):
+        patches = {
+            name: new
+            for name, _old, new, _required in self.branding.build_patches()
+        }
+        self.assertEqual(
+            patches["wordmark foreground (CLI)"],
+            b"g(o,c.fg,c.shadow,c.bg)",
+        )
+        self.assertEqual(
+            patches["wordmark foreground (TUI home)"],
+            b"f(t,U.text,!0)",
+        )
 
     def test_mumps_prompt_label_has_no_visible_padding(self):
         patches = {
@@ -162,6 +176,7 @@ class SourceInstallationTests(unittest.TestCase):
         shutil.copytree(cli.REPO_ROOT / "rosetta", self.checkout / "rosetta", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copytree(cli.REPO_ROOT / ".opencode" / "agent", self.checkout / ".opencode" / "agent")
         shutil.copytree(cli.REPO_ROOT / ".opencode" / "plugins", self.checkout / ".opencode" / "plugins")
+        shutil.copytree(cli.REPO_ROOT / ".opencode" / "themes", self.checkout / ".opencode" / "themes")
         shutil.copy(cli.REPO_ROOT / ".opencode" / "instructions.md", self.checkout / ".opencode")
         shutil.copy(cli.REPO_ROOT / ".opencode" / "tui.json", self.checkout / ".opencode")
         shutil.copy(cli.REPO_ROOT / "opencode.json", self.checkout)
@@ -238,6 +253,15 @@ class SourceInstallationTests(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             str((self.checkout / ".opencode" / "tui.json").resolve()),
+        )
+
+    def test_tui_receives_the_rosetta_theme_directory(self):
+        self.fake_opencode('printf "%s\\n" "$OPENCODE_CONFIG_DIR"\nexit 0\n')
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout.strip(),
+            str((self.checkout / ".opencode").resolve()),
         )
 
     def test_an_explicit_tui_preset_override_is_preserved(self):
@@ -333,21 +357,30 @@ class TuiConfigurationTests(unittest.TestCase):
         preset = json.loads(
             (cli.REPO_ROOT / ".opencode" / "tui.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(preset["theme"], "everforest")
+        self.assertEqual(preset["theme"], "rosetta")
         self.assertEqual(preset["diff_style"], "stacked")
         self.assertEqual(preset["cursor"], {"style": "block", "blinking": True})
+
+        theme_path = cli.REPO_ROOT / ".opencode" / "themes" / "rosetta.json"
+        theme = json.loads(theme_path.read_text(encoding="utf-8"))
+        self.assertEqual(theme["theme"]["background"]["dark"], "dark")
+        self.assertEqual(theme["defs"]["dark"], "#1B1E18")
+        self.assertEqual(theme["defs"]["acid"], "#DDF95C")
+        self.assertEqual(theme["theme"]["diffRemoved"]["dark"], "alarm")
 
     def test_external_project_receives_every_rosetta_command(self):
         config = cli._config()
         self.assertEqual(
             set(config["command"]),
             {
-                "benchmark", "demo", "doctor", "evaluate", "globals",
+                "benchmark", "change", "database", "demo", "doctor", "evaluate", "globals",
                 "moneymoment", "pipeline", "report", "routine", "start",
                 "train", "verify",
             },
         )
         self.assertTrue(config["command"]["doctor"]["subtask"])
+        self.assertIn("rosetta fileman", config["command"]["change"]["template"])
+        self.assertIn("execute the requested FileMan change", config["command"]["change"]["template"])
         self.assertIn("-m rosetta doctor", config["command"]["doctor"]["template"])
         self.assertIn(str(cli.ROOT), config["command"]["doctor"]["template"])
         self.assertEqual(config["default_agent"], "rosetta-agent")
@@ -436,6 +469,7 @@ class ReleaseArtifactTests(unittest.TestCase):
                 f"{root}/opencode.json",
                 f"{root}/.opencode/instructions.md",
                 f"{root}/.opencode/tui.json",
+                f"{root}/.opencode/themes/rosetta.json",
                 f"{root}/.opencode/plugins/rosetta-experience.js",
                 f"{root}/.opencode/agent/rosetta-agent.md",
                 f"{root}/.opencode/command/demo.md",

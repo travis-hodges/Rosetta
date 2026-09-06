@@ -129,7 +129,7 @@ def with_blank_lead(lines: list[str]) -> list[str]:
     return out
 
 
-# The colours the TUI actually paints the shaded wordmark with, read off the
+# The colours the TUI originally paints the split wordmark with, read off the
 # escape stream of a running home screen: a dim half and a bright half, each
 # with its own shadow tone. Reproducing them here is the only way to preview
 # the marked glyphs -- printing them raw shows "_^~", not what a user sees.
@@ -162,13 +162,15 @@ def shaded(half: list[str], palette: tuple[str, str, str], color: bool) -> list[
 
 
 def print_logo(color: bool) -> None:
-    """Both wordmarks: the plain CLI one, then the shaded TUI/home-screen one."""
+    """Both wordmarks: the plain CLI one, then the TUI/home-screen one."""
     print("plain (non-TTY CLI)")
     for line in with_blank_lead(rows(PLAIN, brand)):
         print("  " + line.replace(BLANK_LEAD, " "))
     print()
-    print("shaded (CLI + TUI home)")
-    left = shaded(rows(MARKED, "ro"), _DIM, color)
+    print("single-color (CLI + TUI home)")
+    # The branding patch gives both halves the bright foreground while keeping
+    # OpenCode's original two-column wordmark geometry intact.
+    left = shaded(rows(MARKED, "ro"), _BRIGHT, color)
     right = shaded(rows(MARKED, "setta"), _BRIGHT, color)
     for a, b in zip(left, right):
         print("  " + a + " " + b)
@@ -214,9 +216,24 @@ def build_patches() -> list[tuple[str, bytes, bytes, bool]]:
         required=True,
     )
     add(
-        "wordmark (shaded, CLI + TUI home)",
+        "wordmark (shapes, CLI + TUI home)",
         split_literal(rows(MARKED, "open"), rows(MARKED, "code")),
         split_literal(rows(MARKED, "ro"), rows(MARKED, "setta")),
+        required=True,
+    )
+    # Both renderers otherwise mute the left half of the wordmark. These two
+    # byte-length-preserving edits make `ro` use the same foreground, weight,
+    # counter fill, and shadow as `setta` without flattening muted UI copy.
+    add(
+        "wordmark foreground (CLI)",
+        "g(o,i.fg,i.shadow,i.bg)",
+        "g(o,c.fg,c.shadow,c.bg)",
+        required=True,
+    )
+    add(
+        "wordmark foreground (TUI home)",
+        "f(t,U.textMuted,!1)",
+        "f(t,U.text,!0)",
         required=True,
     )
     add(
