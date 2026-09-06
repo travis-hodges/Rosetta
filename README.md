@@ -54,7 +54,7 @@ Verified on this machine against a live WorldVistA container. Commands are runna
 | | Status |
 |---|---|
 | **The verifier** | `python3 -m rosetta.core.selftest` — passes in ~2.5s |
-| **MCP tool server** | 8 tools over stdio; `opencode mcp list` reports `rosetta connected` |
+| **MCP tool server** | 8 tools over stdio; `rosetta mcp list` reports `rosetta connected` |
 | **The side-by-side** | `python3 -m rosetta.demo` — runs offline, no container, no network |
 | **Mutation generator** | 8 operators; 0.00% defect rate measured against the real YottaDB compiler |
 | **Split lock** | Written and frozen: 350 train / 150 eval, partitioned by duplicate cluster |
