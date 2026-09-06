@@ -4,16 +4,35 @@ Install a dependency-free launcher with
 `bash scripts/install.sh --bin-dir "$HOME/.local/bin"`. The installer never overwrites an
 existing file or changes your shell settings. Keep the checkout and interpreter in place.
 Optional pip editable installation is also supported by the package metadata.
-Then `cd` to a project and run `rosetta`. That opens the branded OpenCode TUI with the
-Rosetta agent, MCP tools, instructions, and slash commands injected in memory; it does not
-write `.opencode` files into the project. `rosetta /another/project` opens a different
-directory. `rosetta --help` lists the secondary CLI workflows.
+Then `cd` to a project and run `rosetta`. That opens the branded TUI with
+Rosetta Agent, Plan, and Verify modes, MCP tools, instructions, and slash
+commands injected in memory; it does not write `.opencode` files into the
+project. `rosetta /another/project` opens a different directory.
+`rosetta --help` lists the secondary CLI workflows.
 
-Inside the TUI, type `/` to discover the Rosetta workflows. `/routine`, `/globals`, and
-`/verify` use the project-facing analysis and verifier tools. `/evaluate`, `/doctor`,
-`/benchmark`, and `/report` expose the standalone workflows without leaving the coding
-session. `/train` builds verified training artifacts without external submission. `/demo`
-is the recorded side-by-side and is labelled as demonstration evidence.
+Rosetta is always enabled. Press Tab to move between:
+
+- **Rosetta Agent** — the default implementation mode.
+- **Rosetta Plan** — read-only routine, call, global, and case planning.
+- **Rosetta Verify** — read-only executable proof and divergence explanation.
+
+The default model ID remains `opencode/big-pickle`, but Rosetta presents it as
+**Translator 1.0** in the product UI. This is a display identity, not evidence
+of MUMPS specialization; benchmark it before making a capability claim.
+
+Inside the TUI, use `/start` for orientation or `/pipeline REQUEST` for the
+full **UNDERSTAND → CHANGE → PROVE** workflow. `/routine`, `/globals`, and
+`/verify` expose its major stages. `/evaluate`, `/doctor`, `/benchmark`,
+`/report`, `/train`, and `/demo` are supporting services.
+
+`/demo` is the shortest judge-facing path. It executes a real VistA MUMPS
+routine on YottaDB, visibly moves through isolation, execution, divergence,
+repair, and replay, and writes tamper-evident JSON receipts to
+`$ROSETTA_PROJECT_DIR/.rosetta/proofs/`. Each receipt binds the verdict to the
+exact baseline and candidate hashes, tested observables, case count, runtime,
+and rollback status. The live flight has a 38-second presentation budget; on
+failure or timeout, the TUI shows the committed AJETIU2 trace with an explicit
+recorded provenance badge.
 
 ## Models
 
@@ -112,6 +131,9 @@ before the isolation fix must not be used to claim a clean model comparison.
 
 Run `python3 -m rosetta demo --help` for the demo harness. Scripted/replayed demos illustrate
 the verifier and are never evidence about a live model's ability.
+`python3 -m rosetta.demo.proof_flight` is different: it exits successfully only
+after fresh YottaDB receipts have been rendered. Its deterministic candidate
+generator demonstrates the verifier, not model quality.
 
 ## Bounded runs and provenance
 

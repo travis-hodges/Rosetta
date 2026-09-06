@@ -1,6 +1,6 @@
 ---
 description: Run or inspect a Rosetta model benchmark
-agent: rosetta
+agent: rosetta-agent
 ---
 Manage the benchmark workflow requested here: $ARGUMENTS
 

@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 from rosetta.core.interface import Divergence
-from rosetta.demo import agents, repair_loop, sidebyside, tasks, verify
+from rosetta.demo import agents, proof_flight, repair_loop, sidebyside, tasks, verify
 
 ROOT = tasks.repo_root()
 
@@ -258,6 +258,7 @@ class CannedSideBySideTests(unittest.TestCase):
         out = buf.getvalue()
         self.assertEqual(code, 0)
         for needle in (
+            "RECORDED AUDIT TRACE",
             "TOOLS OFF",
             "TOOLS ON",
             "NOT EQUIVALENT",
@@ -265,6 +266,9 @@ class CannedSideBySideTests(unittest.TestCase):
             "^DPT",
             "Not Entered",
             "AJETIU2",
+            "PROOF RECEIPT",
+            "ROLLBACK CONFIRMED",
+            "trace sha256",
         ):
             self.assertIn(needle, out, f"missing {needle!r} from the money moment")
 
@@ -285,6 +289,53 @@ class CannedSideBySideTests(unittest.TestCase):
             sidebyside.load_trace(CANNED), stream=second, color=False, width=120
         )
         self.assertEqual(first.getvalue(), second.getvalue())
+
+
+class ProofFlightTests(unittest.TestCase):
+    def _result(self, equivalent: bool) -> dict[str, object]:
+        return {
+            "equivalent": equivalent,
+            "n_void": 0,
+            "divergences": [] if equivalent else [
+                {"kind": "output", "ref": "stdout", "expected": "1", "actual": "0"}
+            ],
+            "proof_receipt": {
+                "provenance": "LIVE YottaDB",
+                "live": True,
+                "elapsed_ms": 123,
+                "receipt_sha256": "a" * 64 if equivalent else "b" * 64,
+                "artifact": "/tmp/proof.json",
+                "isolation": {"restored": True},
+            },
+        }
+
+    def test_live_flight_renders_the_rejection_repair_and_receipts(self) -> None:
+        buf = io.StringIO()
+        proof_flight.render(self._result(False), self._result(True), buf)
+        out = buf.getvalue()
+        for needle in (
+            "LIVE PROOF FLIGHT",
+            "DIVERGENCE CAUGHT",
+            "VERIFIED EQUIVALENT",
+            "persistent global state",
+            "rollback confirmed",
+            "PROOF RECEIPTS",
+            "/tmp/proof.json",
+        ):
+            self.assertIn(needle, out)
+
+    def test_recorded_result_cannot_be_labeled_live(self) -> None:
+        wrong = self._result(False)
+        receipt = wrong["proof_receipt"]
+        assert isinstance(receipt, dict)
+        receipt["live"] = False
+        with self.assertRaisesRegex(RuntimeError, "did not execute on live"):
+            proof_flight.render(wrong, self._result(True), io.StringIO())
+
+    def test_known_candidates_apply_to_the_corpus_source(self) -> None:
+        source = proof_flight.SOURCE.read_text(encoding="utf-8")
+        self.assertIn(proof_flight.WRONG, proof_flight._candidate(source, proof_flight.WRONG))
+        self.assertIn(proof_flight.REPAIRED, proof_flight._candidate(source, proof_flight.REPAIRED))
 
 
 class DegradationTests(unittest.TestCase):

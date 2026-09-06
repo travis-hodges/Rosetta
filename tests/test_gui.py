@@ -64,11 +64,27 @@ class AssetTests(unittest.TestCase):
             self.skipTest("no product site in this checkout")
         site_css = site.read_text(encoding="utf-8")
         gui_css = (STATIC / "app.css").read_text(encoding="utf-8")
-        for token in ("--black:#020202", "--lemon:#f2ff66", "--line:#242424"):
+        for token in (
+            "--paper:#eeeee7",
+            "--ink:#242720",
+            "--muted:#626759",
+            "--acid:#ddf95c",
+            "--line:#c9cbc0",
+            "--dark:#1b1e18",
+        ):
             self.assertIn(token, site_css, f"site no longer defines {token}")
             self.assertIn(token, gui_css, f"GUI is off-brand: missing {token}")
-        for font in ("Space Grotesk", "Space Mono"):
+        # No webfont is reachable from an enclave, so the brand is carried by
+        # the same three system stacks the site falls back to.
+        for font in ("Arial", "Georgia", "SFMono-Regular"):
+            self.assertIn(font, site_css, f"site no longer uses {font}")
             self.assertIn(font, gui_css, f"GUI does not use {font}")
+        # The site deliberately uses an inverted dark terminal inside the
+        # cream document, so do not ban those local contrast colors globally.
+        # Webfonts, however, would break the offline/enclave promise.
+        for stale_font in ("Space Grotesk", "Space Mono"):
+            self.assertNotIn(stale_font, site_css, f"site still carries {stale_font}")
+            self.assertNotIn(stale_font, gui_css, f"GUI still carries {stale_font}")
 
     def test_long_runs_can_be_rejoined(self) -> None:
         # The server-side half is tested in JobTests; this pins the client
@@ -253,9 +269,9 @@ class WiringTests(unittest.TestCase):
             time.sleep(0.02)
         events = jobs.get(job["id"]).to_dict()["events"]
         kinds = [e["kind"] for e in events]
-        self.assertEqual(kinds, ["inputs", "report"])
-        self.assertEqual(events[1]["verdict"], report["verdict"])
-        self.assertIs(events[1]["equivalent"], False)
+        self.assertEqual(kinds, ["inputs", "proof_stage", "proof_stage", "report"])
+        self.assertEqual(events[-1]["verdict"], report["verdict"])
+        self.assertIs(events[-1]["equivalent"], False)
 
     def test_edit_reports_the_verifier_verdict_not_the_model_claim(self) -> None:
         """The whole product is this separation, so it is tested directly."""
@@ -291,6 +307,7 @@ class WiringTests(unittest.TestCase):
                            registry=FakeRegistry(), agent=ConfidentAgent()))
         by_kind = {e.kind: e.data for e in events}
         self.assertIn("attempt", by_kind)
+        self.assertIn("proving", by_kind)
         self.assertIn("This change is behaviour preserving.",
                       by_kind["attempt"]["explanation"])
         self.assertIs(by_kind["verdict"]["equivalent"], False)
@@ -323,7 +340,7 @@ class LiveServerTests(unittest.TestCase):
         return f"http://127.0.0.1:{self.port}{path}"
 
     def test_index_and_assets_are_served(self) -> None:
-        for path, marker in (("/", b"Rosetta"), ("/app.css", b"--lemon"),
+        for path, marker in (("/", b"Rosetta"), ("/app.css", b"--acid"),
                              ("/app.js", b"follow")):
             with urllib.request.urlopen(self.url(path)) as r:
                 self.assertEqual(r.status, 200)

@@ -450,6 +450,15 @@ class ToolBehaviourTests(unittest.TestCase):
         self.assertEqual(out["refs_touched"], ["^DPT(3,0)"])
         self.assertIn("^DPT(3,0)", out["feedback"])
         self.assertNotIn("false", out["verdict"].lower())
+        receipt = out["proof_receipt"]
+        self.assertEqual(receipt["schema"], "rosetta-proof/v1")
+        self.assertEqual(receipt["provenance"], "FAKE BACKEND")
+        self.assertFalse(receipt["live"])
+        self.assertFalse(receipt["isolation"]["restored"])
+        self.assertEqual(len(receipt["baseline_sha256"]), 64)
+        self.assertEqual(len(receipt["candidate_sha256"]), 64)
+        self.assertEqual(len(receipt["receipt_sha256"]), 64)
+        self.assertNotIn("artifact", receipt)
         if DD_CACHE.is_file():
             self.assertIn("SEX", out["feedback"])
 

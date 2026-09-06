@@ -1,6 +1,6 @@
 ---
 description: Evaluate a candidate against a trusted baseline and case suite
-agent: rosetta
+agent: rosetta-verify
 ---
 Help the user run Rosetta's standalone evaluator for: $ARGUMENTS
 

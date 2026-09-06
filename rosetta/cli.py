@@ -105,7 +105,15 @@ def _config() -> dict[str, Any]:
     config["mcp"]["rosetta"]["command"] = [sys.executable, "-m", "rosetta.tools"]
     config["mcp"]["rosetta"].setdefault("environment", {})["PYTHONPATH"] = str(REPO_ROOT)
     config["instructions"] = [str(REPO_ROOT / ".opencode" / "instructions.md")]
-    for name in ("rosetta", "explain", "divergence"):
+    plugin = REPO_ROOT / ".opencode" / "plugins" / "rosetta-experience.js"
+    config["plugin"] = [plugin.resolve().as_uri()]
+    for name in (
+        "rosetta-agent",
+        "rosetta-plan",
+        "rosetta-verify",
+        "rosetta-explain",
+        "rosetta-divergence",
+    ):
         profile = REPO_ROOT / ".opencode" / "agent" / f"{name}.md"
         prompt = profile.read_text(encoding="utf-8").split("---", 2)[-1].strip()
         config.setdefault("agent", {}).setdefault(name, {})["prompt"] = prompt
@@ -123,7 +131,8 @@ def _merge_user_config(config: dict[str, Any], raw: str) -> dict[str, Any]:
         {
             key: value
             for key, value in supplied.items()
-            if key not in reserved and key not in {"instructions", "default_agent"}
+            if key not in reserved
+            and key not in {"instructions", "default_agent", "provider", "model", "plugin"}
         }
     )
     for key, rosetta_entries in reserved.items():
@@ -131,13 +140,44 @@ def _merge_user_config(config: dict[str, Any], raw: str) -> dict[str, Any]:
         if user_entries is not None and not isinstance(user_entries, dict):
             raise ValueError(f"OPENCODE_CONFIG_CONTENT {key!r} must be an object.")
         config[key] = {**(user_entries or {}), **rosetta_entries}
+    user_providers = supplied.get("provider", {})
+    if user_providers is not None and not isinstance(user_providers, dict):
+        raise ValueError("OPENCODE_CONFIG_CONTENT 'provider' must be an object.")
+    rosetta_providers = config.get("provider", {})
+    merged_providers = dict(user_providers or {})
+    for provider_name, rosetta_provider in rosetta_providers.items():
+        user_provider = merged_providers.get(provider_name, {})
+        if not isinstance(user_provider, dict) or not isinstance(rosetta_provider, dict):
+            merged_providers[provider_name] = rosetta_provider
+            continue
+        merged_provider = {**user_provider, **rosetta_provider}
+        user_models = user_provider.get("models", {})
+        rosetta_models = rosetta_provider.get("models", {})
+        if isinstance(user_models, dict) and isinstance(rosetta_models, dict):
+            merged_models = dict(user_models)
+            for model_name, model_config in rosetta_models.items():
+                prior = merged_models.get(model_name, {})
+                merged_models[model_name] = (
+                    {**prior, **model_config}
+                    if isinstance(prior, dict) and isinstance(model_config, dict)
+                    else model_config
+                )
+            merged_provider["models"] = merged_models
+        merged_providers[provider_name] = merged_provider
+    config["provider"] = merged_providers
+    user_plugins = supplied.get("plugin", [])
+    if not isinstance(user_plugins, list) or not all(isinstance(item, str) for item in user_plugins):
+        raise ValueError("OPENCODE_CONFIG_CONTENT 'plugin' must be an array of strings.")
+    config["plugin"] = list(dict.fromkeys([*user_plugins, *config.get("plugin", [])]))
+    if isinstance(supplied.get("model"), str):
+        config["model"] = supplied["model"]
     user_instructions = supplied.get("instructions", [])
     if not isinstance(user_instructions, list) or not all(
         isinstance(item, str) for item in user_instructions
     ):
         raise ValueError("OPENCODE_CONFIG_CONTENT 'instructions' must be an array of strings.")
     config["instructions"] = [*user_instructions, *config.get("instructions", [])]
-    config["default_agent"] = "rosetta"
+    config["default_agent"] = "rosetta-agent"
     return config
 
 
@@ -152,6 +192,8 @@ def cmd_tui(args: argparse.Namespace) -> int:
         env = os.environ.copy()
         env["PWD"] = str(project)
         env["ROSETTA_PROJECT_DIR"] = str(project)
+        env["ROSETTA_HOME"] = str(REPO_ROOT)
+        env["ROSETTA_PYTHON"] = sys.executable
         corpus = args.corpus.expanduser().resolve() if args.corpus else Path(
             env.get("ROSETTA_CORPUS_DIR", project)
         ).expanduser().resolve()
@@ -172,7 +214,7 @@ def cmd_tui(args: argparse.Namespace) -> int:
             command.append(str(project))
         else:
             command.extend(["run", "--dir", str(project)])
-        command.extend(["--agent", "rosetta"])
+        command.extend(["--agent", "rosetta-agent"])
         if args.model:
             from rosetta import models as model_registry
 

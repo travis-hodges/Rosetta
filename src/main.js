@@ -71,21 +71,28 @@ jumps.forEach((button, i) => button.addEventListener('click', () => {
 }));
 updateScroll();
 
-// These outcomes are deliberately authored illustrations, never runtime results.
+// Replays the committed AJETIU2 TUI trace; the landing page never invokes YottaDB.
 const patchButtons = [...document.querySelectorAll('[data-patch]')];
 patchButtons.forEach(button => button.addEventListener('click', () => {
   const fixed = button.dataset.patch === 'fixed';
   patchButtons.forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+  const preview = document.querySelector('.tui-window');
+  preview.classList.toggle('is-broken', !fixed);
+  preview.classList.toggle('is-fixed', fixed);
   const line = document.querySelector('#patch-line');
-  line.textContent = fixed ? ' S ^VISITS(ID)=$G(^VISITS(ID))+1' : ' ; visit counter update removed';
+  line.textContent = fixed
+    ? '+ S MRK=0 I $P($G(NA),U)="" S NOK="Not Entered",MRK=1'
+    : '+ S MRK=0 I $G(NA)="" S NOK="Not Entered",MRK=1';
   line.className = fixed ? 'code-added' : 'code-removed';
-  document.querySelector('#demo-report').innerHTML = `<p><span class="report-key">OUTPUT</span><span class="pass">MATCH</span><span>"RECORDED"</span></p><p><span class="report-key">GLOBAL STATE</span><span class="${fixed ? 'pass' : 'fail'}">${fixed ? 'MATCH' : 'DIVERGED'}</span><span>^VISITS("demo")</span></p><p class="state-detail">${fixed ? 'Expected 4 → observed 4. The write is preserved.' : 'Expected 4 → observed 3. The write disappeared.'}</p><p class="verdict ${fixed ? 'pass' : 'fail'}">${fixed ? '✓ This illustrated case agrees.' : '× Regression found in this example.'}</p>`;
+  document.querySelector('#demo-report').innerHTML = fixed
+    ? '<div><span class="tui-beacon"></span><b>✓ EQUIVALENT</b><small>ALL 4 CASES MATCHED</small></div><p>Candidate behavior agrees with the baseline.</p><p class="tui-diff"><span>EXPECTED&nbsp; "Not Entered"</span><span>ACTUAL&nbsp;&nbsp;&nbsp; "Not Entered"</span></p>'
+    : '<div><span class="tui-beacon"></span><b>✕ NOT EQUIVALENT</b><small>3 OF 4 CASES DIVERGED</small></div><p>DFN 4 · DFN 86 · DFN 88</p><p class="tui-diff"><span>EXPECTED&nbsp; "Not Entered"</span><span>ACTUAL&nbsp;&nbsp;&nbsp; ""</span></p>';
 }));
 const languages = {
-  mumps: { engine: 'MUMPS / YOTTADB', title: 'Start where the code\nmeets the record.', description: 'MUMPS is Rosetta’s first executable language. Inspect routines, evaluate changes, and compare captured global state using YottaDB.', boundary: 'Connect a model of your choice. No trained specialist model weights are bundled today.' },
-  cobol: { engine: 'COBOL / FUTURE RUNTIME', title: 'A longer horizon\nfor business logic.', description: 'COBOL is part of the legacy-code challenge. GAO’s 2025 review identified Treasury systems using COBOL and assembly, with a shrinking pool of maintainers.', boundary: 'A future direction. Rosetta does not currently provide a COBOL execution adapter, benchmark suite, or trained COBOL model.' },
-  jovial: { engine: 'JOVIAL / FUTURE RUNTIME', title: 'Make the unfamiliar\napproachable.', description: 'JOVIAL is part of Rosetta’s long-term language vision. Meaningful support will require a runtime, representative code, and executable evaluation cases.', boundary: 'A future direction. No JOVIAL runtime integration, measured results, or trained JOVIAL model is available today.' },
-  cms: { engine: 'CMS-2 / FUTURE RUNTIME', title: 'More languages.\nThe same standard.', description: 'CMS-2 is another language in the long-term vision. Each new language must earn its place through runtime integration and inspectable evaluation evidence.', boundary: 'A future direction. No CMS-2 runtime integration, measured results, or trained CMS-2 model is available today.' },
+  mumps: { engine: 'MUMPS / YOTTADB', title: 'Start where the code\nmeets the record.', description: 'MUMPS is Rosetta’s first executable language. Inspect routines, evaluate changes, and compare captured global state using YottaDB.', boundary: 'Bring your chosen model. Specialist Rosetta weights remain on the roadmap.' },
+  cobol: { engine: 'COBOL', title: 'A longer horizon\nfor business logic.', description: 'COBOL is part of the legacy-code challenge. GAO’s 2025 review identified Treasury systems using COBOL and assembly, with a shrinking pool of maintainers.', boundary: 'COBOL runtime support, benchmarks, and specialist weights remain on the roadmap.' },
+  jovial: { engine: 'JOVIAL', title: 'Make the unfamiliar\napproachable.', description: 'JOVIAL is part of Rosetta’s long-term language vision. Meaningful support will require a runtime, representative code, and executable evaluation cases.', boundary: 'JOVIAL runtime integration, measured results, and specialist weights remain on the roadmap.' },
+  cms: { engine: 'CMS-2', title: 'More languages.\nThe same standard.', description: 'CMS-2 is another language in the long-term vision. Each new language must earn its place through runtime integration and inspectable evaluation evidence.', boundary: 'CMS-2 runtime integration, measured results, and specialist weights remain on the roadmap.' },
 };
 const languageTabs = [...document.querySelectorAll('[data-language]')];
 function selectLanguage(button, focus = false) {
@@ -144,8 +151,41 @@ if ('IntersectionObserver' in window) {
     if (entry.isIntersecting) { entry.target.classList.add('is-visible'); reveals.unobserve(entry.target); }
   }), { threshold: 0.12 });
   document.querySelectorAll('.reveal').forEach(element => reveals.observe(element));
+
+  const counters = new IntersectionObserver(entries => entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const element = entry.target;
+    const target = Number(element.dataset.value);
+    counters.unobserve(element);
+    if (paused || reducedMotion.matches) { element.textContent = String(target); return; }
+    const started = performance.now();
+    const tick = now => {
+      if (paused) { element.textContent = String(target); return; }
+      const progress = Math.min(1, (now - started) / 900);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      element.textContent = String(Math.round(target * eased));
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    element.textContent = '0';
+    requestAnimationFrame(tick);
+  }), { threshold: 0.55 });
+  document.querySelectorAll('.count-up').forEach(element => counters.observe(element));
+
   document.documentElement.classList.add('js-ready');
 }
+
+document.querySelectorAll('.risk-card').forEach(card => {
+  card.addEventListener('pointermove', event => {
+    if (paused) return;
+    const rect = card.getBoundingClientRect();
+    card.style.setProperty('--mx', `${event.clientX - rect.left}px`);
+    card.style.setProperty('--my', `${event.clientY - rect.top}px`);
+  }, { passive: true });
+  card.addEventListener('pointerleave', () => {
+    card.style.removeProperty('--mx');
+    card.style.removeProperty('--my');
+  });
+});
 
 // A sliced, metallic sphere projected into Canvas 2D. Each latitude is a solid
 // thin disc: metallic gradients give volume without a WebGL/Three dependency.

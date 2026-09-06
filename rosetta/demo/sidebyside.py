@@ -26,10 +26,13 @@ import os
 import shutil
 import sys
 import textwrap
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence, TextIO
+
+from rosetta.proof import trace_digest
 
 from .tasks import repo_root
 
@@ -75,6 +78,9 @@ class Recording:
     """A parsed trace: everything the renderer needs, and nothing else."""
 
     path: str = ""
+    run_id: str = ""
+    recorded_at: float | None = None
+    baseline_sha1: str = ""
     task_id: str = ""
     routine: str = ""
     title: str = ""
@@ -111,6 +117,39 @@ class Recording:
             case.get("divergences") for case in first.verdict.get("cases", [])
         )
 
+    @property
+    def verifier_live(self) -> bool:
+        """Whether the trace contains verdicts produced by real execution."""
+        return any(
+            attempt.verdict and attempt.verdict.get("source") == "live"
+            for condition in self.conditions.values()
+            for attempt in condition.attempts
+        )
+
+    @property
+    def n_cases(self) -> int:
+        return max(
+            (
+                int(attempt.verdict.get("n_cases", 0))
+                for condition in self.conditions.values()
+                for attempt in condition.attempts
+                if attempt.verdict
+            ),
+            default=0,
+        )
+
+    @property
+    def n_void(self) -> int:
+        return max(
+            (
+                int(attempt.verdict.get("n_void", 0))
+                for condition in self.conditions.values()
+                for attempt in condition.attempts
+                if attempt.verdict
+            ),
+            default=0,
+        )
+
 
 def _condition(rec: Recording, name: str) -> ConditionView:
     return rec.conditions.setdefault(name, ConditionView(condition=name))
@@ -137,6 +176,9 @@ def load_trace(path: str | Path) -> Recording:
 
         kind = d.get("kind")
         if kind == "run_start":
+            rec.run_id = d.get("run_id", "")
+            rec.recorded_at = d.get("ts")
+            rec.baseline_sha1 = d.get("baseline_sha1", "")
             rec.task_id = d.get("task_id", "")
             rec.routine = d.get("routine", "")
             rec.title = d.get("title", "")
@@ -361,6 +403,7 @@ def render(
     width: int | None = None,
     pace: float = 0.0,
     show_repair: bool = True,
+    live_now: bool = False,
 ) -> int:
     """Paint the side-by-side. Returns 0 unless the recording was unusable."""
     stream = stream or sys.stdout
@@ -382,10 +425,19 @@ def render(
     on = rec.conditions["tools_on"]
 
     p.line()
+    provenance = (
+        "LIVE YOTTADB · EXECUTED NOW"
+        if live_now and rec.verifier_live
+        else "RECORDED AUDIT TRACE · LIVE YOTTADB CAPTURE"
+        if rec.verifier_live
+        else "RECORDED TRACE · EXECUTION NOT PROVEN"
+    )
+    p.line(p.c(f"  ◉ {provenance}", BOLD, GREEN if rec.verifier_live else YELLOW))
     p.line(p.c(f"  ROSETTA — {rec.title}", BOLD))
     p.line(
         p.c(
-            f"  routine {rec.routine}    task {rec.task_id}    agent {rec.backend}"
+            f"  routine {rec.routine}    task {rec.task_id}    "
+            f"candidate generator {rec.backend or '?'}"
             + (f"    model {rec.model}" if rec.model else ""),
             GREY,
         )
@@ -490,12 +542,29 @@ def render(
             p.line(row)
         p.rule()
 
+    p.line()
+    p.line(p.c("  PROOF RECEIPT", BOLD, GREEN if rec.verifier_live else YELLOW))
     p.line(
-        p.c(
-            f"  trace: {rec.path}",
-            GREY,
-        )
+        "  "
+        + p.c("runtime", GREY)
+        + f"  {'YottaDB' if rec.verifier_live else 'unproven'}    "
+        + p.c("cases", GREY)
+        + f"  {rec.n_cases}    "
+        + p.c("observables", GREY)
+        + "  stdout · errors · persistent globals"
     )
+    restored = rec.verifier_live and rec.n_void == 0
+    p.line(
+        "  "
+        + p.c("clean_state", GREY)
+        + (p.c("  ROLLBACK CONFIRMED", GREEN) if restored else p.c("  NOT ASSERTED", YELLOW))
+    )
+    try:
+        digest = trace_digest(rec.path)
+        p.line("  " + p.c("trace sha256", GREY) + f"  {digest}")
+    except OSError as exc:
+        p.line("  " + p.c("trace sha256", GREY) + f"  unavailable ({exc})")
+    p.line(p.c(f"  trace: {rec.path}", GREY))
     p.line()
     return 0
 
@@ -522,8 +591,52 @@ def latest_trace(task_id: str = "nok-ajetiu2") -> Path | None:
     return Path(matches[-1]) if matches else None
 
 
-def _run_live(task_id: str, out: TextIO) -> Path | None:
+class _LivePulse:
+    """Small TTY-only progress animation; never claims a stage completed."""
+
+    frames = ("◐", "◓", "◑", "◒")
+    messages = (
+        "opening clean-state verification frames",
+        "executing baseline ↔ candidate",
+        "comparing stdout + errors + persistent globals",
+    )
+
+    def __init__(self, out: TextIO, enabled: bool) -> None:
+        self.out = out
+        self.enabled = enabled and bool(getattr(out, "isatty", lambda: False)())
+        self.stop_event = threading.Event()
+        self.thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if not self.enabled:
+            return
+
+        def paint() -> None:
+            tick = 0
+            while not self.stop_event.wait(0.11):
+                frame = self.frames[tick % len(self.frames)]
+                message = self.messages[(tick // 18) % len(self.messages)]
+                self.out.write(f"\r\x1b[2K  {CYAN}{frame}{RESET} LIVE YOTTADB  {message}")
+                self.out.flush()
+                tick += 1
+
+        self.thread = threading.Thread(target=paint, name="rosetta-proof-pulse", daemon=True)
+        self.thread.start()
+
+    def stop(self) -> None:
+        if not self.enabled:
+            return
+        self.stop_event.set()
+        if self.thread is not None:
+            self.thread.join(timeout=0.5)
+        self.out.write("\r\x1b[2K")
+        self.out.flush()
+
+
+def _run_live(task_id: str, out: TextIO, *, animate: bool = True) -> Path | None:
     """Try to record a fresh trace. Returns None on any failure."""
+    pulse = _LivePulse(out, animate)
+    pulse.start()
     try:
         from .repair_loop import run_task
         from .tasks import get_task
@@ -534,6 +647,8 @@ def _run_live(task_id: str, out: TextIO) -> Path | None:
         out.write(f"live run unavailable ({type(exc).__name__}: {exc}); "
                   "falling back to the recording\n")
         return None
+    finally:
+        pulse.stop()
 
 
 def _why_not(rec: Recording) -> str:
@@ -559,22 +674,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="record a fresh trace first (needs the container); falls back to canned",
     )
-    parser.add_argument("--pace", type=float, default=0.0, help="seconds between beats")
+    parser.add_argument("--pace", type=float, default=None, help="seconds between beats")
     parser.add_argument("--width", type=int, default=None)
     parser.add_argument("--no-color", action="store_true")
     parser.add_argument("--no-repair", action="store_true")
+    parser.add_argument("--no-animation", action="store_true")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     rec: Recording | None = None
+    live_now = False
     if args.trace:
         rec = load_trace(Path(args.trace))
     elif args.live:
-        live = _run_live(args.task, sys.stderr)
+        live = _run_live(args.task, sys.stderr, animate=not args.no_animation)
         if live is not None:
             candidate = load_trace(live)
             # A live run that reached no verdict is worse than the recording.
             if candidate.has_money_moment:
                 rec = candidate
+                live_now = True
             else:
                 sys.stderr.write(
                     "live run produced no divergence to show "
@@ -592,12 +710,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         rec = load_trace(path)
 
+    pace = args.pace
+    if pace is None:
+        pace = 0.10 if sys.stdout.isatty() and not args.no_animation else 0.0
     return render(
         rec,
         color=False if args.no_color else None,
         width=args.width,
-        pace=args.pace,
+        pace=pace,
         show_repair=not args.no_repair,
+        live_now=live_now,
     )
 
 

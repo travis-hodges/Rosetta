@@ -20,15 +20,19 @@ test('every local asset the page references exists', async () => {
   assert.ok(references.includes('/src/main.js'));
   assert.ok(references.includes('/src/styles.css'));
   for (const reference of references) {
-    await readFile(new URL(reference.slice(1), site));
+    try {
+      await readFile(new URL(reference.slice(1), site));
+    } catch {
+      await readFile(new URL(`public/${reference.slice(1)}`, site));
+    }
   }
 });
 
-test('the only external origin is the declared font CDN', () => {
+test('the page only links to approved public sources', () => {
   const origins = new Set([...`${html}${css}`.matchAll(/https?:\/\/([^/'")\s]+)/g)].map(match => match[1]));
   for (const origin of origins) {
     assert.ok(
-      ['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'www.w3.org', 'openapi.vercel.sh'].includes(origin),
+      ['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'raw.githubusercontent.com', 'www.w3.org', 'openapi.vercel.sh', 'www.gao.gov', 'department.va.gov'].includes(origin),
       `Unexpected external origin ${origin}`,
     );
   }
@@ -67,8 +71,30 @@ test('external links cannot reach back into the opener', () => {
 });
 
 test('the page never claims benchmark numbers it has not measured', () => {
-  assert.doesNotMatch(html, /\b\d{1,3}(\.\d+)?\s*%/, 'no hand-authored performance percentages');
+  const visibleCopy = html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ');
+  assert.doesNotMatch(visibleCopy, /\b\d{1,3}(\.\d+)?\s*%/, 'no hand-authored performance percentages');
   assert.match(html, /synthetic|illustrative/i, 'the walkthrough must be labelled as illustrative');
+});
+
+test('the stakes and product answer are explicit', () => {
+  assert.match(html, /KNOWN EXPOSURE/);
+  assert.match(html, /known cybersecurity vulnerabilities/);
+  assert.match(html, /THE REQUIRED TRUST LAYER/);
+  assert.match(html, /diff output and database state/i);
+  assert.match(html, /air-gapped environment/i);
+});
+
+test('the landing page shows the product surface and official installer', () => {
+  assert.match(html, /Rosetta terminal UI/);
+  assert.match(html, /OPENCODE-DERIVED TUI/);
+  assert.match(html, /RECORDED AUDIT TRACE/);
+  assert.doesNotMatch(html, /ACTUAL PRODUCT UI|product-window|product-stage/);
+  assert.match(html, /EXECUTION HARNESS/);
+  assert.match(html, /BENCHMARKS/);
+  assert.match(html, /PROOF RECEIPTS/);
+  assert.match(html, /curl -fsSL https:\/\/raw\.githubusercontent\.com\/travis-hodges\/Rosetta\/main\/public\/install\.sh \| sh/);
+  assert.doesNotMatch(html, /hero-warning/);
+  assert.doesNotMatch(script, /FUTURE RUNTIME/);
 });
 
 test('the build produces a servable site and unknown paths 404', async t => {

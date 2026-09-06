@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import difflib
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from rosetta.core.interface import ExecSpec
+from rosetta import proof as proof_mod
 
 from . import analysis, cases as cases_mod, report as report_mod
 from .fileman import DataDictionary, default_dictionary, parse_ref
@@ -429,8 +431,10 @@ def build_tools(reg: ToolRegistry) -> list[Tool]:
                 ) from exc
             case_origin = str(reg.suites.path_for(routine))
 
+        backend = reg.backend
+        started = time.perf_counter()
         try:
-            rep = reg.backend.verify_equivalence(
+            rep = backend.verify_equivalence(
                 routine, baseline_src, candidate_src, suite
             )
         except BackendUnavailable as exc:
@@ -450,6 +454,21 @@ def build_tools(reg: ToolRegistry) -> list[Tool]:
                 "static": static,
             }
         )
+        receipt = proof_mod.build_receipt(
+            routine=routine,
+            baseline_src=baseline_src,
+            candidate_src=candidate_src,
+            result=out,
+            backend=getattr(backend, "name", type(backend).__name__),
+            cases_origin=case_origin,
+            elapsed_ms=int((time.perf_counter() - started) * 1000),
+        )
+        if receipt["live"]:
+            try:
+                receipt["artifact"] = proof_mod.persist_receipt(receipt)
+            except OSError as exc:
+                receipt["artifact_error"] = f"could not save proof receipt: {exc}"
+        out["proof_receipt"] = receipt
         return out
 
     # ---------------------------------------------------------------- 8 ---

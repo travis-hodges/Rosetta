@@ -1,7 +1,8 @@
 # How someone uses Rosetta
 
-Five workflows, available from one project-aware TUI and from standalone
-commands. Every standalone command prints the next one.
+Rosetta is one developer pipeline for obscure code, with supporting
+verification, benchmark, model, and training services. For the hackathon, the
+pipeline is optimized for VA VistA MUMPS.
 
 This document is the contract for the *surface*, the way
 [`docs/PROJECT.md`](PROJECT.md) §7 is the contract for the *core*. It does not
@@ -18,29 +19,30 @@ described as working that does not work.
 ## The one-screen model
 
 ```
-                     ┌─────────────────────────────────────┐
-   your change ─────▶│  1  edit      change it, verified   │
-   your file   ─────▶│  5  verify    check what you wrote  │
-                     ├─────────────────────────────────────┤
-   your model  ─────▶│  2  model     bring your own        │
-                     │  3  bench     measure it            │
-                     │  4  train     improve it            │
-                     └──────────────┬──────────────────────┘
-                                    │  every one of them calls
+ developer request
+        │
+        ▼
+  UNDERSTAND ───────▶ CHANGE ───────▶ PROVE
+  Rosetta Plan       Rosetta Agent    Rosetta Verify
+  routines/calls     smallest edit    output + database state
+        │                 │                    │
+        └─────────────────┴──────────┬─────────┘
                                     ▼
-                          the verifier — the only
-                          thing that decides truth
+                        verifier service
+                        benchmark evidence
+                        training artifacts
 ```
 
-The shape matters more than the commands. There is exactly one arbiter, and
-all five workflows are the same loop viewed from different distances: run both
-versions, diff output *and* database state, believe the diff.
+The coding environment is the product. The verifier provides ground truth
+inside that environment. The benchmark measures whether access to that proof
+service improves the model. Model registration and training feed better
+engines back into the same pipeline.
 
 The default surface and its supporting entry points are the same underneath:
 
 | | What it is | State |
 |---|---|---|
-| **TUI** | bare `rosetta`: branded OpenCode with Rosetta's agent, tools and command palette | **live** |
+| **TUI** | bare `rosetta`: Rosetta Agent, Plan, and Verify modes plus MUMPS tools | **live** |
 | **Standalone CLI** | `rosetta edit`, `verify`, `model`, `bench` and `train` | **live** |
 | **Editor / agent host** | the MCP server, 8 tools, `rosetta mcp serve` | **live** |
 | **Browser view** | `rosetta gui`, the same five workflows in a browser | **live** |
@@ -66,7 +68,21 @@ rosetta                          # opens the TUI here
 `rosetta` opens the current directory and uses it as the default routine
 corpus. `rosetta /another/project` opens another directory. The launcher
 injects Rosetta's config in memory, so it does not leave `.opencode` files in
-the project. Type `/` in the TUI to discover the product workflows.
+the project.
+
+The first screen says `MUMPS change…` and starts with **Translator 1.0**.
+Press Tab to cycle through **Rosetta Agent**, **Rosetta Plan**, and **Rosetta
+Verify**—Rosetta itself never turns off. Use `/start` for a short capability
+orientation or `/pipeline REQUEST` for the complete
+**UNDERSTAND → CHANGE → PROVE** loop. Type `/` for the supporting services.
+
+For a panel, `/demo` is the compact proof of the thesis. It attempts a fresh,
+bounded YottaDB flight on real VA code, animates the actual proof stages in the
+TUI, catches a behavior-changing candidate, replays the repaired candidate,
+and leaves two content-addressed receipts in `.rosetta/proofs/`. A live failure
+falls back immediately after the presentation budget to the committed AJETIU2
+audit trace. The fallback says **RECORDED AUDIT TRACE** on screen; it is never
+presented as a fresh run.
 
 `rosetta --help` and `rosetta status --plain` work offline with no
 container, network or credentials. Everything that needs those is loaded only

@@ -149,6 +149,16 @@ class Api:
         def produce():
             yield {"kind": "inputs", "origin": case_origin,
                    "n_cases": len(cases) if cases else None}
+            yield {
+                "kind": "proof_stage",
+                "stage": "ISOLATE",
+                "detail": "Opening a clean-state transaction boundary for every case",
+            }
+            yield {
+                "kind": "proof_stage",
+                "stage": "EXECUTE",
+                "detail": "Running baseline and candidate against identical YottaDB state",
+            }
             report = verify(routine, candidate, baseline_src=baseline,
                             cases=cases, registry=reg)
             yield {"kind": "report", **report}

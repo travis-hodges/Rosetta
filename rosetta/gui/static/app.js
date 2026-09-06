@@ -91,6 +91,39 @@ function divergenceList(divs) {
         d.fileman_file ? el('span', {}, `file: ${d.fileman_file}`) : null)))));
 }
 
+function proofReceipt(receipt) {
+  if (!receipt) return null;
+  const live = !!receipt.live;
+  const isolation = receipt.isolation || {};
+  const digest = String(receipt.receipt_sha256 || 'unavailable');
+  const artifact = receipt.artifact || receipt.artifact_error || 'session evidence only';
+  return el('section', { class: `proof-receipt ${live ? 'live' : 'test'}` },
+    el('header', {},
+      el('span', { class: 'proof-beacon', 'aria-hidden': 'true' }),
+      el('b', {}, 'Proof receipt'),
+      el('span', { class: 'proof-provenance' }, receipt.provenance || 'UNKNOWN BACKEND')),
+    el('div', { class: 'proof-metrics' },
+      el('div', {}, el('small', {}, 'Runtime'), el('strong', {}, receipt.runtime || 'unknown')),
+      el('div', {}, el('small', {}, 'Cases'), el('strong', {}, String(receipt.n_cases ?? '—'))),
+      el('div', {}, el('small', {}, 'Diverged'), el('strong', {}, String(receipt.n_diverged ?? '—'))),
+      el('div', {}, el('small', {}, 'State'), el('strong', {}, isolation.restored ? 'rolled back' : 'not asserted'))),
+    el('div', { class: 'proof-chain' },
+      (receipt.observables_checked || []).map((name, i) =>
+        el('span', {}, el('i', {}, String(i + 1).padStart(2, '0')), name))),
+    el('footer', {},
+      el('span', {}, `sha256 ${digest.slice(0, 20)}…`),
+      el('span', { title: artifact }, artifact)));
+}
+
+function proofStage(stage, detail) {
+  return step('proof-stage active', [
+    el('span', { class: 'proof-beacon', 'aria-hidden': 'true' }),
+    el('span', { class: 'tag' }, stage),
+    el('span', { class: 'spacer' }),
+    el('span', {}, 'live verifier'),
+  ], [el('p', { class: 'verdict' }, detail)]);
+}
+
 function verdictStep(v, extraHead) {
   const good = !!v.equivalent;
   return step(good ? 'good' : 'bad', [
@@ -101,6 +134,7 @@ function verdictStep(v, extraHead) {
   ], [
     el('p', { class: `verdict ${good ? 'good' : 'bad'}` }, v.verdict),
     divergenceList(v.divergences),
+    proofReceipt(v.proof_receipt),
   ]);
 }
 
@@ -257,7 +291,7 @@ async function driveEdit(jobId, { reattached = false } = {}) {
   try {
     await follow(jobId, (ev) => {
       spinner.clear();
-      if (ev.kind === 'attempt') phase = 'verify';
+      if (ev.kind === 'attempt' || ev.kind === 'proving') phase = 'verify';
       else if (ev.kind === 'verdict') phase = 'model';
 
       if (ev.kind === 'source') {
@@ -273,6 +307,9 @@ async function driveEdit(jobId, { reattached = false } = {}) {
           [diffBlock(ev.diff), ev.explanation
             ? el('p', { class: 'verdict', style: 'color:var(--muted);margin-top:12px' }, ev.explanation)
             : null]));
+      } else if (ev.kind === 'proving') {
+        out.append(proofStage('PROVE',
+          `${ev.n_cases ?? 'Stored'} case(s) · baseline ↔ candidate · stdout + errors + global state`));
       } else if (ev.kind === 'verdict') {
         /* The pill is the audit trail: a rejected verdict was handed back to
            the model, an accepted one ended the loop. Which attempts the model
@@ -390,7 +427,10 @@ async function driveVerify(jobId, { reattached = false } = {}) {
       if (ev.kind === 'inputs') {
         out.append(step('', [el('span', { class: 'tag' }, 'Inputs'),
           el('span', { class: 'spacer' }), el('span', {}, ev.origin)], []));
+      } else if (ev.kind === 'proof_stage') {
+        out.append(proofStage(ev.stage, ev.detail));
       } else if (ev.kind === 'report') {
+        $$('.proof-stage.active', out).forEach(node => node.classList.remove('active'));
         out.append(verdictStep(ev));
         reported = true;
       } else if (ev.kind === 'failed') {

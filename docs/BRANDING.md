@@ -28,7 +28,7 @@ Commands:
   ...
 ```
 
-49 replacement sites in total:
+53 replacement sites in total:
 
 | Surface | Change |
 |---|---|
@@ -36,11 +36,12 @@ Commands:
 | Usage output | yargs script name, every command and positional description |
 | Wordmark | new `r s t a` glyphs drawn in OpenCode's own 4×3 block font — plain, shaded, and the two-glyph monogram |
 | TUI home screen | shaded wordmark |
+| MUMPS-first prompt | `MUMPS change…` with routine, global, and verification examples |
 | `--mini` splash | `ro` monogram plus **Rosetta**, and the `rosetta --mini -s <id>` resume hint |
 | Terminal title | `Rosetta` |
 | Permission dialogs | "until Rosetta is restarted", "Tell Rosetta what to do differently" |
 | Crash screen | "rosetta crashed", crash-report body |
-| Home-screen tips | the ten that name a runnable command |
+| Home-screen tips | runnable commands plus Rosetta Agent/Plan/Verify guidance |
 | Misc | `/exit` description, sound-pack name, upgrade/uninstall banners, MCP and model-not-found hints |
 
 `opencode` still works and shows the same branding: it is the same binary, and Homebrew
@@ -50,6 +51,12 @@ The command intentionally does not point straight at the OpenCode executable.
 It enters through Rosetta's Python launcher, which selects the current project
 as the default corpus and injects the Rosetta MCP server, agents, instructions
 and command palette. The branding script migrates the older direct symlink.
+
+The injected local plugin also owns the presentation layer around proof runs:
+animated stage toasts for isolation, observation, divergence, repair, and
+receipt creation, plus the `/demo` custom tool. The tool executes a bounded
+live YottaDB flight and falls back to a clearly labeled recorded audit trace;
+it does not simulate tool output in the model prompt.
 
 ## What is deliberately left alone
 

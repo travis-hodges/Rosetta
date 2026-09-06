@@ -1,11 +1,15 @@
 ---
-description: Show the recorded verifier side-by-side without a live model
-agent: rosetta
+description: Run Rosetta's live YottaDB proof flight with a recorded fallback
+agent: rosetta-verify
 subtask: true
 ---
-Run this recorded demonstration and show the important divergence exactly:
+Call `rosetta_showcase` exactly once. It runs a short, fresh YottaDB proof on a
+real VistA MUMPS routine: reject a bad candidate, repair it, replay it, and save
+content-addressed receipts. If the live runtime cannot finish, it automatically
+falls back to the committed AJETIU2 audit trace. Do not replace the tool call
+with a shell command or a prose simulation.
 
-!`python3 -m rosetta.demo --pace 0 --width 150`
-
-Explain in two sentences why the plausible candidate was wrong. State clearly
-that this is a recorded demonstration, not live model benchmark evidence.
+Show its provenance badge, divergence, repair, and proof receipt without
+changing their meaning. Then explain in two sentences why the plausible
+candidate was wrong. A deterministic candidate generator is not a model
+benchmark; say so plainly.

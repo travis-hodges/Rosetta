@@ -1,6 +1,6 @@
 ---
 description: Resolve a global to its FileMan file and show sample values
-agent: explain
+agent: rosetta-explain
 ---
 Resolve this global reference and explain what it holds: $ARGUMENTS
 

@@ -4,14 +4,19 @@
 
 ## Current product direction — September 6, 2026
 
-Rosetta is a terminal coding environment built on OpenCode, with configurable models
-(including user-supplied language specialists), executable evaluations, and benchmarks.
-The default product surface is the OpenCode-derived TUI: after installation, running
-`rosetta` inside any project opens that project with Rosetta's tools and workflows.
-The verification engine is a central component of that product. VA FOIA VistA is an
-optional public corpus, not a required identity or hardcoded customer environment.
-MUMPS/YottaDB is implemented; other runtime adapters and trained specialist weights are
-not shipped. See [README](../README.md) and [USAGE](USAGE.md) for current commands.
+Rosetta is a terminal coding environment for developers working on obscure
+legacy languages. Its primary loop is **UNDERSTAND → CHANGE → PROVE**. For the
+hackathon, that loop is explicitly optimized for VA VistA MUMPS under YottaDB.
+
+The default product surface is the OpenCode-derived TUI: running `rosetta`
+inside a project opens Rosetta Agent, Plan, and Verify modes. The verifier is a
+proof service inside the coding loop; the benchmark measures the improvement
+from that service; model registration and training feed engines back into the
+same loop. They are capabilities of Rosetta, not competing product surfaces.
+
+MUMPS/YottaDB is implemented. Other runtime adapters and trained specialist
+weights are not shipped. See [README](../README.md) and [USAGE](USAGE.md) for
+current commands.
 
 The sections below preserve the original hackathon research and plan. Their schedule,
 prior measurements, and model-first rejection describe that historical build sequence;

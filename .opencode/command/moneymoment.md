@@ -1,6 +1,6 @@
 ---
 description: Run the canned side-by-side — the agent that looks right vs the one that is checked
-agent: rosetta
+agent: rosetta-verify
 subtask: true
 ---
 Run this and show me the output verbatim, then explain in two sentences why

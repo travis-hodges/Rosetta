@@ -1,6 +1,6 @@
 ---
 description: Inspect auditable benchmark results and publication readiness
-agent: rosetta
+agent: rosetta-verify
 subtask: true
 ---
 Run `python3 -m rosetta report --print-only` and summarize the current benchmark

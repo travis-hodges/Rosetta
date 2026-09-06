@@ -1,12 +1,18 @@
 # Rosetta
 
-**Ground truth for code nobody can read.**
+**The AI coding environment for code nobody can read.**
 
-Rosetta makes AI modification of legacy code *verifiable*. The U.S. government runs on
-languages almost nobody can read anymore — MUMPS, COBOL, JOVIAL, CMS-2 — and AI models are
-weak on them because there is almost no training data and no way to export more from a
-restricted environment. The dangerous failure mode isn't incapacity, it's that models are
-**fluent and confidently wrong** about systems people depend on.
+Rosetta helps developers understand, change, and prove changes to legacy code.
+For the hackathon, it is optimized around real VA VistA MUMPS running under
+YottaDB:
+
+> **UNDERSTAND → CHANGE → PROVE**
+
+The U.S. government runs on languages almost nobody can read anymore — MUMPS,
+COBOL, JOVIAL, CMS-2 — and AI models are weak on them because there is almost
+no training data and no way to export more from a restricted environment. The
+dangerous failure mode isn't incapacity, it's that models are **fluent and
+confidently wrong** about systems people depend on.
 
 The insight: **you don't need a corpus if you have an interpreter.**
 
@@ -14,11 +20,10 @@ Stop teaching the model the language. Give it a way to check its own work. Snaps
 system, apply the change, run both versions against the same inputs, and diff the program
 output **and** the resulting database state. Correctness stops being an opinion.
 
-One component — the verifier — does four jobs: it grades the benchmark, serves as a tool
-the agent calls while working, generates verified training data, and acts as the reward
-function for reinforcement fine-tuning. That makes the method corpus-agnostic, and it
-means Rosetta **never needs to see the customer's code** — which is what makes it
-deployable air-gapped.
+The verifier is the proof service inside the coding loop. It also grades the
+benchmark, generates verified training data, and acts as the reward function
+for reinforcement fine-tuning. The benchmark demonstrates how much better a
+model performs with Rosetta; it is not a separate product.
 
 - **Proving ground:** MUMPS / VistA under YottaDB — the only real, public,
   production-scale federal legacy estate.
@@ -42,11 +47,27 @@ rosetta
 ```
 
 That bare command opens Rosetta's branded, OpenCode-derived TUI in the current
-directory. It brings the Rosetta agent, verifier tools, operating instructions
-and slash-command workflows with it without writing configuration into your
-project. Type `/` inside the TUI to find routines, inspect globals, verify a
-candidate, evaluate files, run the demo, check the machine, benchmark a model,
-build training data or inspect a report.
+directory. It brings the coding agent, verifier tools, operating instructions
+and workflow commands without writing configuration into your project.
+
+| Press Tab | Purpose |
+|---|---|
+| **Rosetta Agent** | understand, edit, and complete the coding loop |
+| **Rosetta Plan** | map routines, calls, globals, and verification cases |
+| **Rosetta Verify** | prove and explain behavior without authoring code |
+
+Rosetta is always active; Tab changes its mode. The default demo model appears
+as **Translator 1.0**. Type `/start` for orientation, `/pipeline REQUEST` to
+run the complete developer loop, or `/` to discover every supporting
+capability.
+
+For the judge path, type `/demo`. Rosetta runs a short proof flight against a
+real VA VistA routine in YottaDB: a bad candidate is rejected, the repaired
+candidate is replayed, database rollback is confirmed, and content-addressed
+receipts are saved under `.rosetta/proofs/` in the active project. Animated
+stage notifications keep the TUI legible while the interpreter works. If the
+live runtime misses the 38-second demo budget, Rosetta fails over to the
+committed AJETIU2 audit trace and labels it **RECORDED**—never live.
 
 `rosetta /another/project` opens a different workspace. Use `--model` to
 choose a registered name or provider model, and `--corpus` when the MUMPS
@@ -81,6 +102,7 @@ Verified on this machine against a live WorldVistA container. Commands are runna
 | **The verifier** | `python3 -m rosetta.core.selftest` — passes in ~2.5s |
 | **MCP tool server** | 8 tools over stdio; `rosetta mcp list` reports `rosetta connected` |
 | **The side-by-side** | `python3 -m rosetta.demo` — runs offline, no container, no network |
+| **Live proof flight** | TUI `/demo` — live YottaDB first, bounded recorded fallback, receipts |
 | **Mutation generator** | 8 operators; 0.00% defect rate measured against the real YottaDB compiler |
 | **Split lock** | Written and frozen: 350 train / 150 eval, partitioned by duplicate cluster |
 | **Comprehension labels** | 1,493 pairs from the train split, plus the RFT grader |

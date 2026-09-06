@@ -284,6 +284,19 @@ def build_patches() -> list[tuple[str, bytes, bytes, bool]]:
     add("/exit description", 'description:"close OpenCode"', 'description:"close Rosetta"')
     add("sound pack name", 'name:"OpenCode Default"', 'name:"Rosetta Default"')
 
+    # --- MUMPS-first home screen --------------------------------------------
+    add(
+        "prompt label",
+        'return`Ask anything\\u2026 "',
+        'return`MUMPS change\\u2026 "',
+    )
+    for old, new in (
+        ("Fix a TODO in the codebase", "Explain a MUMPS routine"),
+        ("What is the tech stack of this project?", "Trace this VistA routine and globals"),
+        ("Fix broken tests", "Verify my change"),
+    ):
+        add(f'prompt example: "{old}"', jsstr(old), jsstr(new))
+
     # --- errors and hints ----------------------------------------------------
     add("mcp auth hint",
         '"Needs authentication (run: opencode mcp auth "',
@@ -313,9 +326,15 @@ def build_patches() -> list[tuple[str, bytes, bytes, bool]]:
         "Create a plugin to prevent OpenCode from reading sensitive files",
         "OpenCode includes free models so you can start immediately.",
     ]:
+        replacement = {
+            "Create a plugin to prevent OpenCode from reading sensitive files":
+                "Use /routine before editing unfamiliar MUMPS code",
+            "OpenCode includes free models so you can start immediately.":
+                "Press Tab: Rosetta Agent, Plan, or Verify.",
+        }.get(text, text.replace("opencode", brand).replace("OpenCode", BRAND))
         add(f"tip: {text[:44]}...",
             f'"{text}"',
-            '"%s"' % text.replace("opencode", brand).replace("OpenCode", BRAND))
+            f'"{replacement}"')
 
     return p
 

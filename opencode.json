@@ -15,7 +15,17 @@
       }
     }
   },
-  "default_agent": "rosetta",
+  "model": "opencode/big-pickle",
+  "provider": {
+    "opencode": {
+      "models": {
+        "big-pickle": {
+          "name": "Translator 1.0"
+        }
+      }
+    }
+  },
+  "default_agent": "rosetta-agent",
   "instructions": [
     ".opencode/instructions.md"
   ],
@@ -31,8 +41,8 @@
     }
   },
   "agent": {
-    "rosetta": {
-      "description": "Work on obscure languages with the selected model and report executable verification evidence.",
+    "rosetta-agent": {
+      "description": "Rosetta Agent mode: understand, modify, and mechanically verify VA VistA MUMPS.",
       "mode": "primary",
       "color": "#ff8053",
       "temperature": 0.1,
@@ -49,8 +59,28 @@
         "webfetch": "ask"
       }
     },
-    "divergence": {
-      "description": "Read a verification report and explain what broke in plain language.",
+    "rosetta-plan": {
+      "description": "Rosetta Plan mode: map unfamiliar MUMPS routines and globals before editing.",
+      "mode": "primary",
+      "color": "#f4f1e9",
+      "temperature": 0.1,
+      "permission": {
+        "bash": "deny",
+        "edit": "deny"
+      }
+    },
+    "rosetta-verify": {
+      "description": "Rosetta Verify mode: prove a candidate against executable behavior and database state.",
+      "mode": "primary",
+      "color": "#ddf95c",
+      "temperature": 0,
+      "permission": {
+        "bash": "deny",
+        "edit": "deny"
+      }
+    },
+    "rosetta-divergence": {
+      "description": "Explain a Rosetta verification divergence in plain language.",
       "mode": "subagent",
       "color": "#c4deaa",
       "temperature": 0,
@@ -59,8 +89,8 @@
         "edit": "deny"
       }
     },
-    "explain": {
-      "description": "Read-only explanation of an unfamiliar routine grounded in available evidence.",
+    "rosetta-explain": {
+      "description": "Explain an unfamiliar VistA routine using Rosetta's static and FileMan evidence.",
       "mode": "subagent",
       "color": "#a1a49a",
       "temperature": 0.1,
@@ -70,10 +100,10 @@
       }
     },
     "build": {
-      "color": "#a1a49a"
+      "disable": true
     },
     "plan": {
-      "color": "#f4f1e9"
+      "disable": true
     }
   }
 }

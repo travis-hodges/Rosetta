@@ -217,6 +217,7 @@ class MWorker:
         if proc is None:
             self._terminate_remote()
             return
+        exited_cleanly = False
         try:
             if proc.poll() is None and proc.stdin is not None:
                 try:
@@ -226,11 +227,22 @@ class MWorker:
                     pass
             try:
                 proc.wait(timeout=3)
+                exited_cleanly = proc.returncode == 0
             except subprocess.TimeoutExpired:
                 self._terminate_remote()
         finally:
             try:
-                self._terminate_remote()
+                # A zero exit after the worker acknowledged HALT proves the
+                # remote M process is already gone: docker exec is attached to
+                # that exact process.  Re-running the emergency PID/token kill
+                # here added up to ten seconds to every successful proof and
+                # could itself time out.  Runtime.close removes the private
+                # sandbox (including the stale marker) immediately afterwards.
+                if exited_cleanly:
+                    self._pid_file = None
+                    self._remote_token = None
+                else:
+                    self._terminate_remote()
             finally:
                 self._close_client(proc)
 

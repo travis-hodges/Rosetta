@@ -226,6 +226,13 @@ def edit(
             "candidate_src": proposal.candidate_src,
         })
 
+        yield Event("proving", {
+            "n": i,
+            "routine": name,
+            "n_cases": len(cases) if cases else None,
+            "isolation": "clean_state transaction frame per case",
+            "observables": ["stdout", "runtime errors", "persistent global state"],
+        })
         report = verify(name, proposal.candidate_src, baseline_src=baseline,
                         cases=cases, registry=reg)
         yield Event("verdict", {
@@ -236,6 +243,7 @@ def edit(
             "n_diverged": report["n_diverged"],
             "n_void": report["n_void"],
             "divergences": report.get("divergences", []),
+            "proof_receipt": report.get("proof_receipt"),
         })
         if report["equivalent"]:
             yield Event("accepted", {
