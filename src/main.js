@@ -83,3 +83,33 @@ const proofSection = document.querySelector('.workflow-section'); const proofLef
 const updateProof = () => { if (!proofSection || !proofLeft || !proofRight || reducedMotion) return; const bounds = proofSection.getBoundingClientRect(); const progress = Math.max(0, Math.min(1, (window.innerHeight - bounds.top) / (window.innerHeight + bounds.height))); const offset = (progress - .5) * 150; proofLeft.style.transform = `translateX(${offset - 86}px)`; proofRight.style.transform = `translateX(${-offset + 86}px)`; };
 window.addEventListener('scroll', updateProof, { passive: true }); updateProof();
 const year = document.querySelector('#year'); if (year) year.textContent = new Date().getFullYear();
+
+// Copy buttons on the install snippets. Falls back to a hidden textarea
+// because navigator.clipboard is unavailable on insecure origins, which
+// includes anyone opening the built file straight off disk.
+document.querySelectorAll('.copy-btn').forEach((button) => {
+  button.addEventListener('click', async () => {
+    const target = document.getElementById(button.dataset.copy);
+    if (!target) return;
+    const text = target.textContent ?? '';
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const field = document.createElement('textarea');
+      field.value = text;
+      field.setAttribute('readonly', '');
+      field.style.cssText = 'position:fixed;opacity:0';
+      document.body.append(field);
+      field.select();
+      document.execCommand('copy');
+      field.remove();
+    }
+    const original = button.textContent;
+    button.textContent = 'COPIED';
+    button.dataset.copied = '1';
+    setTimeout(() => {
+      button.textContent = original;
+      delete button.dataset.copied;
+    }, 1600);
+  });
+});
