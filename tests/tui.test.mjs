@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import {
-  RosettaExperience,
-  phase,
-  pulseFrames,
-} from '../.opencode/plugins/rosetta-experience.js';
+import { RosettaExperience } from '../.opencode/plugins/rosetta-experience.js';
 import RosettaExperienceDefault from '../.opencode/plugins/rosetta-experience.js';
+import { phase, pulseFrames } from '../.opencode/lib/rosetta-experience-model.js';
 import {
+  RECENT_PROOFS,
   STATUS,
   aggregateStatus,
   databaseArtifactStatus,
   digestFile,
+  directoryTree,
   inferIdentity,
   newestBy,
   normalizeEvent,
@@ -84,6 +83,31 @@ test('the TUI declares the VA system map plugin', async () => {
   assert.match(source, /file\.watcher\.updated/);
   assert.match(source, /edited/);
   assert.match(source, /verified/);
+
+  // `colors()` returns changed/verified. Reading theme names off it -- error,
+  // success -- silently drew the two swatches that carry the panel's meaning
+  // in no colour at all.
+  assert.doesNotMatch(source, /skin\(\)\.(error|success)/);
+});
+
+// This is the test that was missing when the experience plugin went dark:
+// The harness loads a plugin file by walking every export and demanding a
+// function (or an object with a `.server` function), so one exported array
+// takes the entire module -- and every hook in it -- down with a TypeError
+// that only ever appears in the log.
+test('every export of every plugin module is loadable as a plugin', async () => {
+  const directory = new URL('../.opencode/plugins/', import.meta.url);
+  const files = (await readdir(directory)).filter(name => /\.(js|mjs)$/.test(name));
+  assert.ok(files.length > 0, 'no plugin modules found');
+
+  for (const name of files) {
+    const module = await import(new URL(name, directory).href);
+    for (const [key, value] of Object.entries(module)) {
+      const loadable = typeof value === 'function'
+        || (value && typeof value === 'object' && typeof value.server === 'function');
+      assert.ok(loadable, `${name} exports ${key} as ${typeof value}, which the harness cannot load`);
+    }
+  }
 });
 
 test('routine status is red after edit and green only for its exact proof hash', async () => {
@@ -129,6 +153,75 @@ test('system scan exposes the complete routine directory and verified database a
   assert.ok(view.changes.every(item => item.status === STATUS.VERIFIED));
   assert.equal(view.snapshots.length, 1);
   assert.equal(view.status.globals, STATUS.VERIFIED);
+
+  // The tree is the layout: one row per directory, carrying the true total.
+  assert.deepEqual(view.tree.map(dir => [dir.label, dir.count, dir.hidden]), [
+    ['data/routines/', 2, 2],
+  ]);
+  assert.equal(view.tree[0].status, STATUS.IDLE);
+});
+
+test('the directory tree keeps the changed files and collapses the untouched bulk', () => {
+  const routines = [
+    { relative: 'A.m', routine: 'A', status: STATUS.IDLE, mtimeMs: 1 },
+    { relative: 'B.m', routine: 'B', status: STATUS.CHANGED, mtimeMs: 3 },
+    { relative: 'C.m', routine: 'C', status: STATUS.VERIFIED, mtimeMs: 2 },
+    { relative: 'nested/D.m', routine: 'D', status: STATUS.IDLE, mtimeMs: 4 },
+  ];
+
+  const tree = directoryTree(routines, { root: 'data/routines' });
+  assert.deepEqual(tree.map(dir => dir.label), ['data/routines/', 'data/routines/nested/']);
+
+  const [top, nested] = tree;
+  assert.equal(top.count, 3);
+  // Newest interesting file first; the single untouched file is a count.
+  assert.deepEqual(top.children.map(item => item.name), ['B.m', 'C.m']);
+  assert.equal(top.hidden, 1);
+  assert.equal(top.status, STATUS.CHANGED);
+
+  assert.equal(nested.count, 1);
+  assert.deepEqual(nested.children, []);
+  assert.equal(nested.hidden, 1);
+  assert.equal(nested.status, STATUS.IDLE);
+});
+
+test('a 500-routine corpus stays inside the sidebar and the budget is per directory', () => {
+  const many = Array.from({ length: 500 }, (unused, index) => ({
+    relative: `R${index}.m`,
+    routine: `R${index}`,
+    status: index < 30 ? STATUS.CHANGED : STATUS.IDLE,
+    mtimeMs: index,
+  }));
+
+  const [dir] = directoryTree(many, { root: 'data/routines', budget: 8 });
+  assert.equal(dir.count, 500);
+  assert.equal(dir.children.length, 8);
+  // Newest first, and the hidden count still accounts for every file.
+  assert.deepEqual(dir.children.map(item => item.name).slice(0, 3), ['R29.m', 'R28.m', 'R27.m']);
+  assert.equal(dir.children.length + dir.hidden, 500);
+
+  // One directory row, its shown children, and one "N unchanged" row -- the
+  // whole routine section fits well inside a ~20-row pane.
+  assert.ok(1 + dir.children.length + 1 <= 12);
+});
+
+test('the proofs section shows the newest few and reports the real total', async () => {
+  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-proofs-'));
+  const proofs = path.join(project, '.rosetta', 'proofs');
+  await mkdir(proofs, { recursive: true });
+  for (let index = 0; index < RECENT_PROOFS + 4; index += 1) {
+    await writeFile(path.join(proofs, `${index}.json`), JSON.stringify({
+      schema: 'rosetta-proof/v1',
+      routine: `R${index}`,
+      equivalent: true,
+      created_at: `2026-01-0${1}T00:0${index}:00Z`,
+    }));
+  }
+
+  const view = scanSystem({ project, corpus: project });
+  assert.equal(view.proofs.length, RECENT_PROOFS + 4);
+  assert.equal(view.recentProofs.length, RECENT_PROOFS);
+  assert.equal(view.recentProofs[0].routine, `R${RECENT_PROOFS + 3}`);
 });
 
 test('system map status and events preserve edited-over-verified priority', () => {

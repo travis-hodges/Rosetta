@@ -18,6 +18,9 @@ const IGNORED_DIRECTORIES = new Set([
   "dist",
 ])
 
+// How many of the newest proofs the sidebar lists under `proofs/`.
+export const RECENT_PROOFS = 5
+
 export function digestFile(file) {
   return createHash("sha256").update(readFileSync(file)).digest("hex")
 }
@@ -126,6 +129,50 @@ export function inferIdentity({ project, corpus, explicitName }) {
   return path.basename(path.resolve(corpus || project)) || "Legacy system"
 }
 
+/**
+ * Fold a routine list into the directory tree the sidebar can actually show.
+ *
+ * VistA is 500 flat routines and the pane is about twenty rows tall, so a row
+ * per file is not a visualization -- it is a wall that pushes globals,
+ * snapshots and proofs off the bottom of the screen. What an operator needs
+ * from the layout is the shape (which directories, how big) plus every file
+ * whose state is not "untouched". So each directory reports its own count and
+ * rolled-up status, and only interesting children are listed under it; the
+ * rest collapse into one "N unchanged" row.
+ *
+ * `budget` caps the interesting children *per directory*, newest first, so one
+ * heavily edited directory cannot starve the others.
+ */
+export function directoryTree(routines, { root, budget = 6 } = {}) {
+  const groups = new Map()
+  for (const item of routines) {
+    const parent = path.dirname(item.relative)
+    const key = parent === "." ? "" : parent
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(item)
+  }
+
+  const base = root && root !== "." ? String(root).replace(/\/+$/, "") : ""
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, items]) => {
+      const interesting = items
+        .filter((item) => item.status !== STATUS.IDLE)
+        .sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0))
+      const shown = interesting.slice(0, budget)
+      return {
+        key,
+        label: `${[base, key].filter(Boolean).join("/")}/`,
+        count: items.length,
+        status: aggregateStatus(items.map((item) => item.status)),
+        children: shown.map((item) => ({ ...item, name: path.basename(item.relative) })),
+        // Everything not shown: the untouched bulk, plus any interesting files
+        // past the budget. One number, so the row never lies about the total.
+        hidden: items.length - shown.length,
+      }
+    })
+}
+
 export function scanSystem({ project, corpus, modifiedFiles = new Set(), explicitName = "" }) {
   const routineRoot = resolveRoutineRoot(project, corpus)
   const proofs = readJsonFiles(path.join(project, ".rosetta", "proofs"))
@@ -155,7 +202,11 @@ export function scanSystem({ project, corpus, modifiedFiles = new Set(), explici
     identity: inferIdentity({ project, corpus, explicitName }),
     routineRoot,
     routines,
+    tree: directoryTree(routines, { root: path.relative(project, routineRoot) || routineRoot }),
     proofs,
+    // Proofs accumulate forever -- one file per verifier run. The panel shows
+    // the newest few; the section header still carries the true total.
+    recentProofs: proofs.slice(-RECENT_PROOFS).reverse(),
     changes,
     snapshots,
     status: {

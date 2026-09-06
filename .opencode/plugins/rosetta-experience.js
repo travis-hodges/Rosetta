@@ -3,63 +3,14 @@
 // a nested npm install.
 const tool = (definition) => definition
 
+// Everything this module exports is loaded as a plugin: the harness iterates
+// the module namespace and throws "Plugin export is not a function" on the
+// first entry that is not one, taking the whole file -- and every hook in it --
+// down with it. So the frames and the phase table are imported, never
+// re-exported.
+import { phase, pulseFrames, toolName } from "../lib/rosetta-experience-model.js"
+
 let loaded = false
-
-export const pulseFrames = [
-  "◆ · · · ·",
-  "· ◆ · · ·",
-  "· · ◆ · ·",
-  "· · · ◆ ·",
-  "· · · · ◆",
-  "· · · ◆ ·",
-  "· · ◆ · ·",
-  "· ◆ · · ·",
-]
-
-const toolName = (value) => String(value || "").toLowerCase().replaceAll("-", "_")
-
-export const phase = (value) => {
-  const name = toolName(value)
-  if (name.includes("rosetta_showcase")) {
-    return { label: "PROOF FLIGHT", message: "Launching the live YottaDB verifier", pulse: false }
-  }
-  if (name.endsWith("verify_change") || name.includes("verify_change")) {
-    return {
-      label: "PROVE",
-      message: "Baseline + candidate · identical state · output + globals",
-      pulse: true,
-    }
-  }
-  if (name.endsWith("run_task_cases") || name.includes("run_task_cases")) {
-    return {
-      label: "PROVE",
-      message: "Replaying the held cases through the executable verifier",
-      pulse: true,
-    }
-  }
-  if (name.endsWith("execute_routine") || name.includes("execute_routine")) {
-    return {
-      label: "EXECUTE",
-      message: "Capturing stdout, runtime errors, and persistent global state",
-      pulse: true,
-    }
-  }
-  if (name.endsWith("resolve_global") || name.includes("resolve_global")) {
-    return {
-      label: "UNDERSTAND",
-      message: "Resolving the MUMPS global through the FileMan dictionary",
-      pulse: false,
-    }
-  }
-  if (name.endsWith("parse_routine") || name.includes("parse_routine") || name.includes("call_graph")) {
-    return {
-      label: "UNDERSTAND",
-      message: "Mapping labels, calls, and persistent global access",
-      pulse: false,
-    }
-  }
-  return null
-}
 
 export const RosettaExperience = async ({ client }) => {
   if (loaded) return {}

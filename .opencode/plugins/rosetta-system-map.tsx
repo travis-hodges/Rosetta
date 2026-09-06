@@ -7,6 +7,7 @@ import path from "node:path"
 import {
   STATUS,
   aggregateStatus,
+  directoryTree,
   normalizeEvent,
   scanSystem,
 } from "../lib/rosetta-system-model.js"
@@ -41,87 +42,115 @@ const statusLabel = (status: string) => {
 
 const statusGlyph = (status: string) => status === STATUS.CHANGED ? "●" : status === STATUS.VERIFIED ? "◆" : "○"
 
-function StatusText(props: { api: TuiPluginApi; status: string; children: any }) {
-  const skin = () => colors(props.api)
-  return (
-    <text fg={skin()[props.status as "idle" | "changed" | "verified"] || skin().muted}>
-      {statusGlyph(props.status)} {props.children}
-    </text>
-  )
-}
-
-function Node(props: { api: TuiPluginApi; label: string; status: string; width?: number }) {
+function Node(props: { api: TuiPluginApi; label: string; status: string }) {
   const skin = () => colors(props.api)
   const tone = () => skin()[props.status as "idle" | "changed" | "verified"] || skin().muted
   return (
-    <box border borderColor={tone()} width={props.width || 15} alignItems="center" paddingLeft={1} paddingRight={1}>
+    <box border borderColor={tone()} flexGrow={1} flexShrink={1} minWidth={0} alignItems="center">
       <text fg={tone()} wrapMode="none"><b>{props.label}</b></text>
     </box>
   )
 }
 
+// Two 17-column boxes plus a joiner do not fit a ~34-column sidebar, and the
+// overflow tore the panel's own right border, so flex shares the row instead of
+// asserting a width. The identity box that used to sit above these two is gone:
+// it repeated the panel header for four of the pane's two dozen rows, and those
+// rows are the directory listing.
 function Topology(props: { api: TuiPluginApi; snapshot: any }) {
-  const skin = () => colors(props.api)
   return (
-    <box flexDirection="column" alignItems="center">
-      <Node api={props.api} label={String(props.snapshot.identity).toUpperCase()} status={props.snapshot.status.system} width={17} />
-      <text fg={skin().border}>│</text>
-      <box flexDirection="row">
-        <Node api={props.api} label="ROUTINES" status={props.snapshot.status.routines} width={17} />
-        <text fg={skin().border}>─</text>
-        <Node api={props.api} label="GLOBALS" status={props.snapshot.status.globals} width={17} />
-      </box>
+    <box flexDirection="row" flexShrink={0}>
+      <Node api={props.api} label="ROUTINES" status={props.snapshot.status.routines} />
+      <Node api={props.api} label="GLOBALS" status={props.snapshot.status.globals} />
+    </box>
+  )
+}
+
+// The layout, not a file list. `directoryTree` has already collapsed the
+// untouched bulk into a count per directory, so every section below -- the
+// routines, the persistent changes, the snapshots and the proofs -- stays on
+// screen at the same time. A section with nothing in it still shows its row,
+// because "no persistent changes yet" is information about the system.
+function Row(props: { api: TuiPluginApi; status: string; label: string; note?: string }) {
+  const skin = () => colors(props.api)
+  const tone = () => skin()[props.status as "idle" | "changed" | "verified"] || skin().muted
+  return (
+    <box flexDirection="row" justifyContent="space-between">
+      <text fg={tone()} wrapMode="none">  {statusGlyph(props.status)} {props.label}</text>
+      <Show when={props.note}>
+        <text fg={tone()} wrapMode="none">{props.note}</text>
+      </Show>
+    </box>
+  )
+}
+
+function Section(props: { api: TuiPluginApi; label: string; count: number; status?: string }) {
+  const skin = () => colors(props.api)
+  const tone = () => props.status
+    ? (colors(props.api)[props.status as "idle" | "changed" | "verified"] || skin().muted)
+    : skin().muted
+  return (
+    <box flexDirection="row" justifyContent="space-between">
+      <text fg={skin().muted} wrapMode="none">▼ {props.label}</text>
+      <text fg={tone()} wrapMode="none">{props.count}</text>
     </box>
   )
 }
 
 function Directory(props: { api: TuiPluginApi; snapshot: any }) {
   const skin = () => colors(props.api)
-  const relativeRoot = () => path.relative(project, props.snapshot.routineRoot) || "."
   return (
-    <box flexDirection="column">
-      <text fg={skin().text}><b>SYSTEM DIRECTORY</b></text>
-      <text fg={skin().muted} wrapMode="none">▼ {relativeRoot()}/  {props.snapshot.routines.length}</text>
-      <For each={props.snapshot.routines}>
-        {(item: any) => (
-          <box flexDirection="row" justifyContent="space-between">
-            <StatusText api={props.api} status={item.status}>
-              {item.relative}
-            </StatusText>
-            <Show when={item.status !== STATUS.IDLE}>
-              <text fg={skin()[item.status as "changed" | "verified"]}>{item.status === STATUS.CHANGED ? "Δ" : "✓"}</text>
+    <box flexDirection="column" flexGrow={1} flexShrink={1}>
+      <text fg={skin().text} flexShrink={0}><b>SYSTEM DIRECTORY</b></text>
+
+      <box flexDirection="column" flexShrink={1} overflow="hidden">
+      <For each={props.snapshot.tree}>
+        {(dir: any) => (
+          <box flexDirection="column" flexShrink={0}>
+            <Section api={props.api} label={dir.label} count={dir.count} status={dir.status} />
+            <For each={dir.children}>
+              {(item: any) => (
+                <Row
+                  api={props.api}
+                  status={item.status}
+                  label={item.name}
+                  note={item.status === STATUS.CHANGED ? "Δ" : "✓"}
+                />
+              )}
+            </For>
+            <Show when={dir.hidden > 0}>
+              <text fg={skin().muted} wrapMode="none">  ○ {dir.hidden} unchanged</text>
             </Show>
           </box>
         )}
       </For>
+      </box>
 
-      <text fg={skin().muted}>▼ globals/  {props.snapshot.changes.length}</text>
+      <Section api={props.api} label="globals/" count={props.snapshot.changes.length}
+               status={props.snapshot.status.globals} />
       <Show when={props.snapshot.changes.length === 0}>
-        <text fg={skin().muted}>  ○ no persistent changes</text>
+        <text fg={skin().muted} wrapMode="none">  ○ no persistent changes</text>
       </Show>
       <For each={props.snapshot.changes}>
         {(item: any) => (
-          <StatusText api={props.api} status={item.status}>
-            {item._name} · {statusLabel(item.status)}
-          </StatusText>
+          <Row api={props.api} status={item.status} label={item._name} note={statusLabel(item.status)} />
         )}
       </For>
 
-      <text fg={skin().muted}>▼ snapshots/  {props.snapshot.snapshots.length}</text>
+      <Section api={props.api} label="snapshots/" count={props.snapshot.snapshots.length} />
       <For each={props.snapshot.snapshots}>
         {(item: any) => (
-          <StatusText api={props.api} status={STATUS.VERIFIED}>
-            {String(item.snapshot_id).split(/[\\/]/).at(-1)}
-          </StatusText>
+          <Row api={props.api} status={STATUS.VERIFIED}
+               label={String(item.snapshot_id).split(/[\\/]/).at(-1)} />
         )}
       </For>
 
-      <text fg={skin().muted}>▼ proofs/  {props.snapshot.proofs.length}</text>
-      <For each={props.snapshot.proofs.toReversed()}>
+      <Section api={props.api} label="proofs/" count={props.snapshot.proofs.length}
+               status={props.snapshot.status.proofs} />
+      <For each={props.snapshot.recentProofs}>
         {(item: any) => (
-          <StatusText api={props.api} status={item.equivalent === true ? STATUS.VERIFIED : STATUS.CHANGED}>
-            {item.routine} · {item.equivalent === true ? "CLEAN" : "DIVERGED"}
-          </StatusText>
+          <Row api={props.api} status={item.equivalent === true ? STATUS.VERIFIED : STATUS.CHANGED}
+               label={item.routine} note={item.equivalent === true ? "CLEAN" : "DIVERGED"} />
         )}
       </For>
     </box>
@@ -141,9 +170,14 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
       return changed.has(item.file) || changed.has(relative) ? { ...item, status: STATUS.CHANGED } : item
     })
     const routineState = aggregateStatus(routines.map((item: any) => item.status))
+    // The tree is what the pane draws, so it has to be rebuilt from the
+    // session-adjusted statuses. Reusing `base.tree` here showed the last
+    // filesystem scan and no live edits at all.
+    const root = path.relative(project, base.routineRoot) || base.routineRoot
     return {
       ...base,
       routines,
+      tree: directoryTree(routines, { root }),
       status: {
         ...base.status,
         routines: routineState,
@@ -157,22 +191,22 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
       border
       borderColor={skin().border}
       backgroundColor={skin().panel}
-      paddingTop={1}
-      paddingBottom={1}
       paddingLeft={1}
       paddingRight={1}
       flexDirection="column"
-      gap={1}
     >
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={skin().accent}><b>{current().identity.toUpperCase()} SYSTEM</b></text>
+      <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
+        <text fg={skin()[current().status.system as "idle" | "changed" | "verified"] || skin().accent}
+              wrapMode="none">
+          <b>{statusGlyph(current().status.system)} {current().identity.toUpperCase()} SYSTEM</b>
+        </text>
         <text fg={skin().info}>LIVE</text>
       </box>
-      <text fg={skin().muted}>{language} · {runtime} · {container}/{instance}</text>
+      <text fg={skin().muted} wrapMode="none">{language} · {runtime} · {instance}</text>
       <Topology api={props.api} snapshot={current()} />
-      <box flexDirection="row" gap={2}>
-        <text fg={skin().error}>● edited</text>
-        <text fg={skin().success}>◆ verified</text>
+      <box flexDirection="row" gap={2} flexShrink={0}>
+        <text fg={skin().changed}>● edited</text>
+        <text fg={skin().verified}>◆ verified</text>
         <text fg={skin().muted}>○ clean</text>
       </box>
       <Directory api={props.api} snapshot={current()} />
