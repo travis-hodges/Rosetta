@@ -36,6 +36,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
+from rosetta import __version__
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # The five workflows, in the order they are usually met. `rosetta` with no
@@ -608,6 +610,9 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="Run `rosetta` with no arguments for the map.",
     )
     ap.add_argument("--plain", action="store_true", help="no banner")
+    # A download channel with no way to report its own version is unfixable in the
+    # field: a bug report has to be able to say which build it came from.
+    ap.add_argument("--version", action="version", version=f"rosetta {__version__}")
     sub = ap.add_subparsers(dest="cmd")
 
     # `--plain` is global, but `rosetta status --plain` is what people type.

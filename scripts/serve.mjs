@@ -18,13 +18,18 @@ const types = {
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  // Plain text so `curl | sh` works and a browser shows the installer instead of
+  // silently downloading it. Reading it before running it is the recommended path.
+  '.sh': 'text/plain; charset=utf-8',
 };
 
 // Ordered candidate roots. Serving sources must not expose the rest of the
 // repository, so only the site's own directories are reachable.
 const roots = dist ? [join(root, 'dist')] : [join(root, 'public'), root];
+// Top-level pages and src/ only. Anything nested outside src/ stays unreachable, so
+// serving the sources cannot expose the rest of the repository.
 const servable = relative => dist
-  || relative === 'index.html'
+  || (relative.endsWith('.html') && !relative.includes('/'))
   || relative.startsWith('src/');
 
 const server = createServer(async (request, response) => {
@@ -32,6 +37,8 @@ const server = createServer(async (request, response) => {
   try { path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname); }
   catch { response.writeHead(400); response.end('Bad request'); return; }
   if (path.endsWith('/')) path += 'index.html';
+  // Match Vercel's cleanUrls: /download is served by download.html.
+  else if (!extname(path)) path += '.html';
 
   // Reject traversal before touching the filesystem.
   const relative = normalize(path).replace(/^(\.\.[/\\])+/, '').replace(/^[/\\]+/, '');

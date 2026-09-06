@@ -1,0 +1,6 @@
+{
+  "_comment": "Written by .github/workflows/release.yml when a v* tag is pushed. Never hand-edit: a stale version or checksum on the download page is worse than none, because it teaches people that verification failing is normal. `latest: null` makes the page show a pending state.",
+  "repository": "https://github.com/travis-hodges/Rosetta",
+  "latest": null,
+  "releases": []
+}
