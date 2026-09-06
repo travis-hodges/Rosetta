@@ -31,10 +31,44 @@ class AssetTests(unittest.TestCase):
 
     def test_the_page_loads_nothing_remote(self) -> None:
         """An enclave machine has no route to a CDN, so a remote asset is a
-        blank page rather than a slow one."""
+        blank page rather than a slow one.
+
+        Checked against the URLs the browser would actually fetch, not against
+        the raw text: an inline `data:` favicon legitimately carries the SVG
+        namespace `http://www.w3.org/2000/svg`, which is an identifier and not
+        a request.
+        """
+        import re
+
         html = (STATIC / "index.html").read_text(encoding="utf-8")
-        for pattern in ("http://", "https://", "//cdn", "unpkg", "googleapis"):
+        fetched = re.findall(r'(?:src|href)\s*=\s*"([^"]*)"', html)
+        self.assertTrue(fetched, "no assets found to check")
+        for url in fetched:
+            if url.startswith("data:") or url.startswith("#"):
+                continue  # inline, or an in-page route
+            self.assertTrue(
+                url.startswith("/"),
+                f"index.html fetches something non-local: {url}",
+            )
+        # And no font service anywhere, inline or not.
+        for pattern in ("googleapis", "gstatic", "unpkg", "cdn."):
             self.assertNotIn(pattern, html, f"index.html references {pattern}")
+
+    def test_the_gui_uses_the_site_palette(self) -> None:
+        """The GUI drifted off-brand once already, when `web/index.html` was
+        replaced by `src/styles.css` and the old palette went with it. This
+        pins the two together so the next change is a failure, not a surprise.
+        """
+        site = Path(__file__).resolve().parents[1] / "src" / "styles.css"
+        if not site.exists():
+            self.skipTest("no product site in this checkout")
+        site_css = site.read_text(encoding="utf-8")
+        gui_css = (STATIC / "app.css").read_text(encoding="utf-8")
+        for token in ("--black:#020202", "--lemon:#f2ff66", "--line:#242424"):
+            self.assertIn(token, site_css, f"site no longer defines {token}")
+            self.assertIn(token, gui_css, f"GUI is off-brand: missing {token}")
+        for font in ("Space Grotesk", "Space Mono"):
+            self.assertIn(font, gui_css, f"GUI does not use {font}")
 
     def test_long_runs_can_be_rejoined(self) -> None:
         # The server-side half is tested in JobTests; this pins the client
@@ -289,7 +323,7 @@ class LiveServerTests(unittest.TestCase):
         return f"http://127.0.0.1:{self.port}{path}"
 
     def test_index_and_assets_are_served(self) -> None:
-        for path, marker in (("/", b"Rosetta"), ("/app.css", b"--accent"),
+        for path, marker in (("/", b"Rosetta"), ("/app.css", b"--lemon"),
                              ("/app.js", b"follow")):
             with urllib.request.urlopen(self.url(path)) as r:
                 self.assertEqual(r.status, 200)
