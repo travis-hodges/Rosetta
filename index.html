@@ -51,14 +51,38 @@
   </div>
 </section>
 <section class="demo-section section-pad" id="demo" aria-labelledby="demo-title">
-  <div class="section-kicker mono"><span>03 / LOOKS RIGHT. RUN IT.</span><span>INTERACTIVE ILLUSTRATION</span></div>
+  <div class="section-kicker mono"><span>03 / LOOKS RIGHT. RUN IT.</span><span>RECORDED TERMINAL OUTPUT</span></div>
   <div class="section-heading"><h2 id="demo-title" class="reveal">The answer is<br><em>only half the story.</em></h2><p>In MUMPS, persistent globals are the database. A routine can return the expected text and still write the wrong value.</p></div>
   <div class="demo-layout">
-    <div class="terminal"><div class="terminal-head"><span class="terminal-dots" aria-hidden="true">● ● ●</span><span>rosetta / synthetic example</span><span>MUMPS</span></div><div class="terminal-body"><p class="terminal-prompt"><span>›</span> Preserve the visit counter when simplifying this routine.</p><div class="code-heading mono">CANDIDATE PATCH</div><pre class="code-block"><code><span class="line-number">01</span> RECORD(ID)
-<span class="line-number">02</span> <span class="code-removed" id="patch-line"> ; visit counter update removed</span>
-<span class="line-number">03</span> W "RECORDED",!
-<span class="line-number">04</span> Q</code></pre><div class="terminal-divider"></div><div class="terminal-report" id="demo-report" aria-live="polite" aria-atomic="true"><p><span class="report-key">OUTPUT</span><span class="pass">MATCH</span><span>"RECORDED"</span></p><p><span class="report-key">GLOBAL STATE</span><span class="fail">DIVERGED</span><span>^VISITS("demo")</span></p><p class="state-detail">Expected 4 → observed 3. The write disappeared.</p><p class="verdict fail">× Regression found in this example.</p></div></div><div class="terminal-foot mono"><span>SYNTHETIC DATA / ILLUSTRATIVE RESULTS</span><span>NO CODE IS EXECUTED HERE</span></div></div>
-    <div class="demo-controls"><span class="mono">ONE CHANGE. TWO OUTCOMES.</span><h3>A missing write.<br>A visible difference.</h3><p>Switch between an incomplete patch and a patch that preserves the counter. Both print the same message. Only one retains the illustrated state change.</p><div class="patch-options" role="group" aria-label="Illustrative patch"><button type="button" data-patch="broken" aria-pressed="true"><span>01</span> Incomplete patch <b aria-hidden="true">↗</b></button><button type="button" data-patch="fixed" aria-pressed="false"><span>02</span> Preserve the write <b aria-hidden="true">↗</b></button></div><p class="fine-print">This is an authored walkthrough, not a live runtime or benchmark result. Passing selected cases provides evidence within their coverage; it is not a proof of all program behavior.</p></div>
+    <div class="terminal"><div class="terminal-head"><span class="terminal-dots" aria-hidden="true">● ● ●</span><span>rosetta verify / recorded run</span><span>MUMPS</span></div><div class="terminal-body"><div class="transcript-stack" id="demo-transcript"><pre class="transcript is-active" data-transcript="broken"><code><span class="cli-prompt">$</span> rosetta verify ROSREC \
+    --baseline examples/mumps/ROSREC.m \
+    --candidate examples/mumps/ROSREC.candidate.m \
+    --cases examples/mumps/ROSREC.cases.json
+inputs    examples/mumps/ROSREC.cases.json
+<span class="fail">NOT EQUIVALENT</span> — ROSREC candidate diverged on 2 of 2 case(s), with 2 divergence(s) across 1 distinct reference(s).
+
+2 case(s), 2 diverged, 0 void
+
+  [case 0] Database state differs at ^VISITS("demo")
+      piece 1: expected "1", got "&lt;absent&gt;"
+      ^VISITS has no FileMan data dictionary entry; the pieces above are positional only.
+
+  [case 1] Database state differs at ^VISITS("demo")
+      piece 1: expected "1", got "&lt;absent&gt;"
+      ^VISITS has no FileMan data dictionary entry; the pieces above are positional only.
+
+<span class="cli-next">next</span>  fix the divergence above, then re-run this command
+      rosetta edit ROSREC --request '...'   # let a model repair it</code></pre><pre class="transcript" data-transcript="fixed" aria-hidden="true"><code><span class="cli-prompt">$</span> rosetta verify ROSREC \
+    --baseline examples/mumps/ROSREC.m \
+    --candidate examples/mumps/ROSREC.equivalent.m \
+    --cases examples/mumps/ROSREC.cases.json
+inputs    examples/mumps/ROSREC.cases.json
+<span class="pass">EQUIVALENT</span> — ROSREC candidate matched the baseline on all 2 case(s): same output, same error behaviour, and identical global state after every run.
+
+2 case(s), 0 diverged, 0 void
+
+<span class="cli-next">next</span>  cp examples/mumps/ROSREC.equivalent.m data/routines/ROSREC.m   # apply it</code></pre></div></div><div class="terminal-foot mono"><span>VERBATIM OUTPUT / ROSETTA VERIFY</span><span>NOT EXECUTED IN YOUR BROWSER</span></div></div>
+    <div class="demo-controls"><span class="mono">ONE CHANGE. TWO OUTCOMES.</span><h3>A missing write.<br>A visible difference.</h3><p>Switch between the candidate that drops the counter update and one that keeps it. Both print <code>RECORDED</code>. Only one leaves the database where the baseline left it.</p><div class="patch-options" role="group" aria-label="Recorded run"><button type="button" data-patch="broken" aria-pressed="true"><span>01</span> Drops the write <b aria-hidden="true">↗</b></button><button type="button" data-patch="fixed" aria-pressed="false"><span>02</span> Keeps the write <b aria-hidden="true">↗</b></button></div><p class="fine-print">Both panels are real output, recorded verbatim from <code>rosetta verify</code> against <code>examples/mumps/</code> — colour is the only thing added. Passing the selected cases is evidence within their coverage, not a proof of all program behaviour.</p></div>
   </div>
 </section>
 <section class="languages-section section-pad" id="languages" aria-labelledby="languages-title">
