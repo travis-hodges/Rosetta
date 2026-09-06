@@ -126,7 +126,7 @@ test('the source server refuses paths outside the site', async t => {
   assert.equal((await fetch(base)).status, 200);
   assert.equal((await fetch(base + '/src/main.js')).status, 200);
   assert.equal((await fetch(base + '/og.png')).status, 200);
-  for (const path of ['/AGENTS.md', '/package.json', '/orchestration/orchestrator.py', '/.git/config']) {
+  for (const path of ['/AGENTS.md', '/package.json', '/rosetta/core/interface.py', '/.git/config']) {
     assert.equal((await fetch(base + path)).status, 404, `${path} must not be served`);
   }
 });

@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: What Rosetta is (read first)
-    url: https://github.com/travis-hodges/Rosetta/blob/main/docs/PROJECT.md
-    about: The master document. Rosetta is a verification system for AI modification of unreadable legacy code.
-  - name: Orchestration handbook
-    url: https://github.com/travis-hodges/Rosetta/blob/main/docs/ORCHESTRATION.md
-    about: How the temporary issue-triggered agent service works. Infrastructure, not the project.

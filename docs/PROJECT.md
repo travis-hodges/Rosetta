@@ -4,10 +4,7 @@
 
 > **This file defines what Rosetta *is*.** Rosetta is a verification system for AI
 > modification of legacy code in languages almost nobody can read — MUMPS, COBOL, JOVIAL,
-> CMS-2. It is **not** the GitHub-issue orchestration service in `orchestration/`. That
-> service is build infrastructure that *produces* Rosetta; it is not the product. If you
-> are an agent and you were about to describe Rosetta as an agent-orchestration tool, stop
-> and read this document. See [ORCHESTRATION.md](ORCHESTRATION.md) for the distinction.
+> CMS-2.
 
 Complete project specification: market context, thesis, architecture, 36-hour build plan,
 benchmark methodology, pitch, and post-hackathon strategy.
@@ -511,8 +508,7 @@ hour 0.
 
 ### Repository layout
 
-The product package lives at `rosetta/`, alongside — and independent of — the
-`orchestration/` build service described in [ORCHESTRATION.md](ORCHESTRATION.md).
+The product package lives at `rosetta/`.
 
 ```
 Rosetta/
@@ -520,8 +516,7 @@ Rosetta/
 ├── CLAUDE.md                  Claude-specific compliance notes
 ├── README.md                  pitch + quickstart
 ├── docs/
-│   ├── PROJECT.md             this file — what Rosetta is
-│   └── ORCHESTRATION.md       the build service (infrastructure, not the product)
+│   └── PROJECT.md             this file — what Rosetta is
 ├── rosetta/
 │   ├── core/                  interface.py (FROZEN) + runtime, snapshot, diff, verify
 │   ├── mutate/                mutation operators, task generation
@@ -529,7 +524,6 @@ Rosetta/
 │   ├── tools/                 MCP server
 │   ├── train/                 labels, sft, grader
 │   └── demo/                  side-by-side harness
-├── orchestration/             GitHub-issue → local agent service (infrastructure)
 ├── data/
 │   ├── routines/              extracted .m files
 │   ├── snapshots/             YottaDB .dat captures (gitignored)
