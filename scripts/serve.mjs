@@ -26,11 +26,12 @@ const types = {
 // Ordered candidate roots. Serving sources must not expose the rest of the
 // repository, so only the site's own directories are reachable.
 const roots = dist ? [join(root, 'dist')] : [join(root, 'public'), root];
-// Top-level pages and src/ only. Anything nested outside src/ stays unreachable, so
+// Top-level pages, src/, and the pitch prototype only. Other nested paths stay unreachable, so
 // serving the sources cannot expose the rest of the repository.
 const servable = relative => dist
   || (relative.endsWith('.html') && !relative.includes('/'))
-  || relative.startsWith('src/');
+  || relative.startsWith('src/')
+  || relative.startsWith('pitch/');
 
 const server = createServer(async (request, response) => {
   let path;

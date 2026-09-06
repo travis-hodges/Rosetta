@@ -8,6 +8,6 @@
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/serve.mjs --dist",
-    "test": "node --test tests/web.test.mjs"
+    "test": "node --test tests/web.test.mjs tests/pitch.test.mjs"
   }
 }

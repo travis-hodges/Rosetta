@@ -19,6 +19,11 @@ for (const name of await readdir(join(root, 'src'))) {
   const source = await readFile(join(root, 'src', name), 'utf8');
   new Script(source, { filename: `src/${name}` });
 }
+for (const name of await readdir(join(root, 'pitch'))) {
+  if (!name.endsWith('.js')) continue;
+  const source = await readFile(join(root, 'pitch', name), 'utf8');
+  new Script(source, { filename: `pitch/${name}` });
+}
 
 for (const page of pages) {
   const html = await readFile(join(root, page), 'utf8');
@@ -41,6 +46,7 @@ for (const page of pages) {
   await writeFile(join(dist, page), await readFile(join(root, page), 'utf8'));
 }
 await cp(join(root, 'src'), join(dist, 'src'), { recursive: true });
+await cp(join(root, 'pitch'), join(dist, 'pitch'), { recursive: true });
 await cp(join(root, 'public'), dist, { recursive: true });
 
 console.log(`Built Rosetta site → dist/ (${pages.join(', ')})`);
