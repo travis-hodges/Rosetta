@@ -32,9 +32,9 @@ name = f"rosetta-{rosetta.__version__}"
 archive = out / f"{name}.tar.gz"
 
 INCLUDE = [
-    "rosetta", "bin", "scripts", "data", "results/canned",
+    "rosetta", "bin", "scripts", "data", "results/canned", ".opencode",
     "docs", "README.md", "AGENTS.md", "CLAUDE.md",
-    "LICENSE", "NOTICE", "pyproject.toml",
+    "LICENSE", "NOTICE", "pyproject.toml", "opencode.json",
 ]
 missing = [p for p in INCLUDE if not (root / p).exists()]
 if missing:

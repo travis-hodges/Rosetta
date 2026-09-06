@@ -69,6 +69,11 @@ stage notifications keep the TUI legible while the interpreter works. If the
 live runtime misses the 38-second demo budget, Rosetta fails over to the
 committed AJETIU2 audit trace and labels it **RECORDED**—never live.
 
+The terminal ships with a dark forest presentation preset, stacked one-column
+diffs for narrow legacy source, and a blinking block cursor. During executable
+tools, a restrained scanner pulse stays in motion until the runtime returns a
+verdict. Set `OPENCODE_TUI_CONFIG` yourself to keep an operator-selected preset.
+
 `rosetta /another/project` opens a different workspace. Use `--model` to
 choose a registered name or provider model, and `--corpus` when the MUMPS
 sources are not the project directory.

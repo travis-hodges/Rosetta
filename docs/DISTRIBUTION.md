@@ -13,7 +13,7 @@ the main way this goes wrong.
 
 | Payload | Size | Owner | Ships in our artifact |
 |---|---|---|---|
-| **The tool** — `rosetta/`, `bin/`, `scripts/` | ~900 KB | us | yes |
+| **The tool** — `rosetta/`, `bin/`, `scripts/`, `.opencode/`, `opencode.json` | ~900 KB | us | yes |
 | **The data** — `data/` (506 files: 2.4 MB routines, split lock, task sets, FileMan dict) | 5.5 MB | VA / us | yes — see §3.2 |
 | **The runtime** — `worldvista/vehu` container + YottaDB | multi-GB | WorldVistA | **never** |
 
@@ -68,58 +68,15 @@ These are ordered. Each one is a thing a downloader hits immediately if it's mis
 
 ### 3.0 Repair the verification you are about to rely on
 
-**Status: partly fixed. The rest needs a product decision.**
+**Status: complete.** The source installer, external-project TUI, CLI aliases,
+case validation, browser palette, website commands, and release artifact are covered by
+the normal test discovery gate. The tag workflow no longer carries a known-broken list:
+it runs the same complete Python suite as CI, then the web, pitch, and TUI tests.
 
-Fixed:
-
-- `tests/test_install.py` referenced `cli.ROOT`, renamed to `cli.REPO_ROOT` in `6d3109e`.
-  All 11 tests died in `setUp`. Renamed. This recovered the three installer-contract
-  tests §5 depends on — `test_reinstall_does_not_overwrite_existing_launcher`,
-  `test_install_requires_explicit_destination`, `test_missing_checkout_fails_clearly` —
-  which now pass.
-- `tests/web.test.mjs` was 3/11 red: `/favicon.svg` resolved without `build.mjs`'s
-  `public/` fallback; `www.gao.gov` and `department.va.gov` citations were undeclared;
-  and the benchmark-claims guard fired on `max-width:100%` inside `<noscript><style>`.
-  All three fixed, plus the origin check now reports every offender at once instead of
-  aborting on the first. **11/11 green.**
-- The claims guard now reads visible text with `<style>`, `<script>` and attributes
-  stripped, and carries the §4 `sha256` assertion. Checked against six cases so it is
-  not vacuous: it still flags `94%` and `7.5 %` in prose and a 64-hex literal, and no
-  longer flags CSS.
-- Strays removed: `index 2.html`, `scripts/build 2.mjs`, `public/og 2.png`,
-  `tests/web.test 2.mjs`.
-
-Outstanding — **29 Python failures in three groups**, none mechanical:
-
-**A. The removed CLI contract (25).** `6d3109e` deleted the `code`, `eval` and `models`
-commands and replaced the machine-readable `doctor` with human-readable text.
-`tests/test_install.py` and `tests/test_rescue.py` both still assert the old contract —
-`doctor` emitting JSON with `ok`, `mcp_tools: 8` and `source_checkout`, plus
-`code --prompt --timeout` and `eval --baseline --candidate --cases --out`. Either
-`doctor --json` comes back (two test files and the MCP surface all want it) or these
-tests are rewritten against `status`/`verify`/`edit`/`model`. That is a product call.
-
-**This group has already leaked to the website.** `index.html` ships copy-buttons for
-`python3 -m rosetta code` and `python3 -m rosetta eval --help`; both now exit 2 with an
-argparse error. A visitor who follows the front page gets a broken command today. §6
-replaces those rows anyway, but it is a live bug, not a cosmetic one.
-
-**B. The GUI is genuinely off-brand (1).** `test_the_gui_uses_the_site_palette` is
-**correct and the drift is real** — not a stale test. `rosetta/gui/static/app.css` is
-still the dark/lemon palette (`--black:#020202`, `--lemon:#f2ff66`, `--line:#242424`)
-while `src/styles.css` was rebranded to cream/charcoal/acid (`--paper:#eeeee7`,
-`--ink:#242720`, `--acid:#ddf95c`). Its docstring says it exists so "the next change is
-a failure, not a surprise" — it worked. Fixing it is a visual redesign of the GUI from
-dark to cream, not a token swap, so it is a design decision.
-
-**C. A lost safety property, which is the real find (part of A's count).** Retargeting
-the malformed-case test from `eval` to `verify` shows the validation did not survive the
-rewrite. `rosetta verify` with `--cases '[{"routine":123}]'` — a non-string routine name
-— **executes and reports a divergence** instead of refusing the input. Exit code on bad
-input also changed from 2 to 1. `AGENTS.md` requires failing loudly rather than
-swallowing errors in the verifier; malformed input silently executing is the opposite,
-and the test that guarded it has been dead since `6d3109e`. Fixing it touches verifier
-input validation, so it is deliberately not done here.
+The release bundle is also inspected directly to prove that `opencode.json`, the
+agent/command profiles, the presentation preset, and the experience plugin ship without
+`node_modules`. This prevents a downloadable build from passing the offline demo while
+silently omitting the primary TUI.
 
 ### 3.1 `LICENSE` + `NOTICE`
 
@@ -198,9 +155,9 @@ Per release, in order:
      which requires §3.0 first, because today it always would;
    - asserts the tag matches `rosetta.__version__`, failing loudly on mismatch;
    - builds `rosetta-<version>.tar.gz` from the tag, containing `rosetta/`, `bin/`,
-     `scripts/`, `data/`, `results/canned/`, `docs/`, `README.md`, `LICENSE`, `NOTICE`,
-     and nothing else — no `.git`, no `node_modules`, no `dist`, no `results/*` beyond
-     canned, no `data/models.json`;
+     `scripts/`, `.opencode/`, `opencode.json`, `data/`, `results/canned/`, `docs/`,
+     `README.md`, `LICENSE`, `NOTICE`, and nothing else — no `.git`, no `node_modules`,
+     no `dist`, no `results/*` beyond canned, no `data/models.json`;
    - writes `SHA256SUMS`;
    - creates the GitHub Release with both files attached;
    - writes `public/releases.json` — version, tag, tarball URL, sha256 — and commits it

@@ -196,6 +196,15 @@ def cmd_tui(args: argparse.Namespace) -> int:
         env["ROSETTA_PROJECT_DIR"] = str(project)
         env["ROSETTA_HOME"] = str(REPO_ROOT)
         env["ROSETTA_PYTHON"] = sys.executable
+        tui_config = REPO_ROOT / ".opencode" / "tui.json"
+        if not tui_config.is_file():
+            raise ValueError(
+                "Rosetta TUI presentation files are missing. Reinstall from a complete release."
+            )
+        # This is a default, not a lock: an operator can deliberately supply a
+        # different TUI config, and a target project's config still has the
+        # final say in OpenCode's normal precedence order.
+        env.setdefault("OPENCODE_TUI_CONFIG", str(tui_config))
         corpus = args.corpus.expanduser().resolve() if args.corpus else Path(
             env.get("ROSETTA_CORPUS_DIR", project)
         ).expanduser().resolve()

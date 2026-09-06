@@ -37,6 +37,8 @@ Commands:
 | Wordmark | new `r s t a` glyphs drawn in OpenCode's own 4×3 block font — plain, shaded, and the two-glyph monogram |
 | TUI home screen | shaded wordmark |
 | MUMPS-first prompt | `MUMPS change…` with routine, global, and verification examples |
+| TUI palette | Everforest dark preset, stacked diffs, blinking block cursor |
+| Running proof | scanner pulse for executable tools; staged isolate/observe/diverge/replay flight |
 | `--mini` splash | `ro` monogram plus **Rosetta**, and the `rosetta --mini -s <id>` resume hint |
 | Terminal title | `Rosetta` |
 | Permission dialogs | "until Rosetta is restarted", "Tell Rosetta what to do differently" |
@@ -53,8 +55,10 @@ as the default corpus and injects the Rosetta MCP server, agents, instructions
 and command palette. The branding script migrates the older direct symlink.
 
 The injected local plugin also owns the presentation layer around proof runs:
-animated stage toasts for isolation, observation, divergence, repair, and
-receipt creation, plus the `/demo` custom tool. The tool executes a bounded
+an in-motion scanner for long executable calls, staged toasts for isolation,
+observation, divergence, repair, and receipt creation, plus the `/demo` custom tool.
+The pulse describes work in progress and stops before the evidence toast, so motion
+can never be mistaken for a completed proof. The tool executes a bounded
 live YottaDB flight and falls back to a clearly labeled recorded audit trace;
 it does not simulate tool output in the model prompt.
 

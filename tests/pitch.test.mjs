@@ -33,5 +33,6 @@ test('motion has a reduced-motion path and no fabricated percentages', () => {
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   const visibleCopy = html.replace(/<[^>]+>/g, ' ');
   assert.doesNotMatch(visibleCopy, /\b\d{1,3}(?:\.\d+)?\s*%/);
-  assert.match(html, /no sample claims/i);
+  assert.match(html, /published results pending/i);
+  assert.doesNotMatch(html, /goes here|placeholder/i);
 });

@@ -1,6 +1,6 @@
 # Rosetta pitch prototype
 
-This dependency-free browser presentation is a blueprint for Rosetta's pitch. It intentionally uses placeholder copy so the visual rhythm and animation system can be decided before the narrative is finalized.
+This dependency-free browser presentation is a populated Rosetta pitch with an editable visual and motion system.
 
 ## Run it
 
@@ -35,4 +35,4 @@ From the repository root, run `npm run dev`, then open `http://127.0.0.1:5173/pi
 7. Reserved slot for measured benchmark evidence
 8. Closing line and direct handoff to the demo
 
-The benchmark slide contains no invented performance claims. Replace placeholders only after the narrative and measured results are ready.
+The benchmark slide contains no invented performance claims. Replace its `TBD` values only when measured results are ready.

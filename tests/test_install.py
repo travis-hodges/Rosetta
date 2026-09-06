@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 
@@ -162,6 +163,7 @@ class SourceInstallationTests(unittest.TestCase):
         shutil.copytree(cli.REPO_ROOT / ".opencode" / "agent", self.checkout / ".opencode" / "agent")
         shutil.copytree(cli.REPO_ROOT / ".opencode" / "plugins", self.checkout / ".opencode" / "plugins")
         shutil.copy(cli.REPO_ROOT / ".opencode" / "instructions.md", self.checkout / ".opencode")
+        shutil.copy(cli.REPO_ROOT / ".opencode" / "tui.json", self.checkout / ".opencode")
         shutil.copy(cli.REPO_ROOT / "opencode.json", self.checkout)
         (self.checkout / "data").symlink_to(cli.REPO_ROOT / "data", target_is_directory=True)
         (self.checkout / "scripts").mkdir()
@@ -228,6 +230,23 @@ class SourceInstallationTests(unittest.TestCase):
         result = self.run_cli(str(project))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines()[:2], [str(project.resolve()), str(project.resolve())])
+
+    def test_tui_receives_the_rosetta_presentation_preset(self):
+        self.fake_opencode('printf "%s\\n" "$OPENCODE_TUI_CONFIG"\nexit 0\n')
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout.strip(),
+            str((self.checkout / ".opencode" / "tui.json").resolve()),
+        )
+
+    def test_an_explicit_tui_preset_override_is_preserved(self):
+        override = self.directory / "operator-tui.json"
+        self.env["OPENCODE_TUI_CONFIG"] = str(override)
+        self.fake_opencode('printf "%s\\n" "$OPENCODE_TUI_CONFIG"\nexit 0\n')
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), str(override))
 
     def test_prompt_timeout_does_not_echo_private_prompt(self):
         self.fake_opencode("exec /bin/sleep 3\n")
@@ -310,6 +329,14 @@ class EvalValidationTests(unittest.TestCase):
 
 
 class TuiConfigurationTests(unittest.TestCase):
+    def test_presentation_preset_is_legible_for_legacy_diffs(self):
+        preset = json.loads(
+            (cli.REPO_ROOT / ".opencode" / "tui.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(preset["theme"], "everforest")
+        self.assertEqual(preset["diff_style"], "stacked")
+        self.assertEqual(preset["cursor"], {"style": "block", "blinking": True})
+
     def test_external_project_receives_every_rosetta_command(self):
         config = cli._config()
         self.assertEqual(
@@ -389,6 +416,32 @@ class TuiConfigurationTests(unittest.TestCase):
             provider["models"]["big-pickle"]["options"]["temperature"],
             0.2,
         )
+
+
+class ReleaseArtifactTests(unittest.TestCase):
+    def test_release_contains_the_complete_tui_surface(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["/bin/bash", str(cli.REPO_ROOT / "scripts" / "make-tarball.sh"), directory],
+                cwd=cli.REPO_ROOT,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            archive = next(Path(directory).glob("rosetta-*.tar.gz"))
+            with tarfile.open(archive, "r:gz") as bundle:
+                names = set(bundle.getnames())
+            root = archive.name.removesuffix(".tar.gz")
+            expected = {
+                f"{root}/opencode.json",
+                f"{root}/.opencode/instructions.md",
+                f"{root}/.opencode/tui.json",
+                f"{root}/.opencode/plugins/rosetta-experience.js",
+                f"{root}/.opencode/agent/rosetta-agent.md",
+                f"{root}/.opencode/command/demo.md",
+            }
+            self.assertEqual(expected - names, set())
+            self.assertFalse(any("node_modules" in name for name in names))
 
 
 if __name__ == "__main__":

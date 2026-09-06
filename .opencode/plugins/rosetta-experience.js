@@ -2,19 +2,58 @@ import { tool } from "@opencode-ai/plugin"
 
 let loaded = false
 
+export const pulseFrames = [
+  "◆ · · · ·",
+  "· ◆ · · ·",
+  "· · ◆ · ·",
+  "· · · ◆ ·",
+  "· · · · ◆",
+  "· · · ◆ ·",
+  "· · ◆ · ·",
+  "· ◆ · · ·",
+]
+
 const toolName = (value) => String(value || "").toLowerCase().replaceAll("-", "_")
 
-const phase = (value) => {
+export const phase = (value) => {
   const name = toolName(value)
-  if (name.includes("rosetta_showcase")) return ["PROOF FLIGHT", "Launching the live YottaDB verifier"]
+  if (name.includes("rosetta_showcase")) {
+    return { label: "PROOF FLIGHT", message: "Launching the live YottaDB verifier", pulse: false }
+  }
   if (name.endsWith("verify_change") || name.includes("verify_change")) {
-    return ["PROVE", "Executing baseline and candidate from identical database state"]
+    return {
+      label: "PROVE",
+      message: "Baseline + candidate · identical state · output + globals",
+      pulse: true,
+    }
+  }
+  if (name.endsWith("run_task_cases") || name.includes("run_task_cases")) {
+    return {
+      label: "PROVE",
+      message: "Replaying the held cases through the executable verifier",
+      pulse: true,
+    }
+  }
+  if (name.endsWith("execute_routine") || name.includes("execute_routine")) {
+    return {
+      label: "EXECUTE",
+      message: "Capturing stdout, runtime errors, and persistent global state",
+      pulse: true,
+    }
   }
   if (name.endsWith("resolve_global") || name.includes("resolve_global")) {
-    return ["UNDERSTAND", "Resolving the MUMPS global through the FileMan dictionary"]
+    return {
+      label: "UNDERSTAND",
+      message: "Resolving the MUMPS global through the FileMan dictionary",
+      pulse: false,
+    }
   }
   if (name.endsWith("parse_routine") || name.includes("parse_routine") || name.includes("call_graph")) {
-    return ["UNDERSTAND", "Mapping labels, calls, and persistent global access"]
+    return {
+      label: "UNDERSTAND",
+      message: "Mapping labels, calls, and persistent global access",
+      pulse: false,
+    }
   }
   return null
 }
@@ -23,12 +62,37 @@ export const RosettaExperience = async ({ client }) => {
   if (loaded) return {}
   loaded = true
 
+  const activePulses = new Map()
+
   const toast = async (title, message, variant = "info", duration = 1800) => {
     try {
       await client.tui.showToast({ body: { title: `Rosetta · ${title}`, message, variant, duration } })
+      return true
     } catch {
       // Headless `opencode run` has no TUI endpoint. The proof itself must continue.
+      return false
     }
+  }
+
+  const stopPulse = (callID) => {
+    const timer = activePulses.get(callID)
+    if (timer) clearInterval(timer)
+    activePulses.delete(callID)
+  }
+
+  const startPulse = async (callID, current) => {
+    stopPulse(callID)
+    let index = 0
+    const showFrame = () => toast(
+      `${current.label}  ${pulseFrames[index++ % pulseFrames.length]}`,
+      current.message,
+      "info",
+      820,
+    )
+    if (!await showFrame()) return
+    const timer = setInterval(showFrame, 860)
+    timer.unref?.()
+    activePulses.set(callID, timer)
   }
 
   return {
@@ -42,10 +106,10 @@ export const RosettaExperience = async ({ client }) => {
           if (!root) throw new Error("ROSETTA_HOME is not set; launch this UI with `rosetta`")
 
           const timers = [
-            setTimeout(() => toast("ISOLATE", "Every case runs inside a clean-state transaction frame", "info", 2200), 1300),
-            setTimeout(() => toast("OBSERVE", "Comparing stdout, runtime errors, and persistent global state", "info", 2600), 3900),
-            setTimeout(() => toast("DIVERGENCE CAUGHT", "The interpreter found an output change the candidate missed", "error", 2600), 11500),
-            setTimeout(() => toast("REPAIR + REPLAY", "Testing the corrected MUMPS from the same clean state", "info", 2600), 14500),
+            setTimeout(() => toast("01/04  ISOLATE  ◆ · · ·", "Holding every case inside a clean-state transaction frame", "info", 2200), 1300),
+            setTimeout(() => toast("02/04  OBSERVE  ◆ ◆ · ·", "Watching stdout, runtime errors, and persistent global state", "info", 2600), 3900),
+            setTimeout(() => toast("03/04  DIVERGENCE  ◆ ◆ ◆ ·", "The interpreter found an output change the candidate missed", "error", 2600), 11500),
+            setTimeout(() => toast("04/04  REPLAY  ◆ ◆ ◆ ◆", "Testing the corrected MUMPS from the same clean state", "info", 2600), 14500),
           ]
           try {
             let timedOut = false
@@ -103,14 +167,22 @@ export const RosettaExperience = async ({ client }) => {
     },
     "tool.execute.before": async (input) => {
       const current = phase(input.tool)
-      if (current) await toast(current[0], current[1])
+      if (!current) return
+      if (current.pulse) {
+        await startPulse(input.callID, current)
+      } else {
+        await toast(current.label, current.message)
+      }
     },
     "tool.execute.after": async (input, output) => {
+      stopPulse(input.callID)
       const name = toolName(input.tool)
-      if (!name.includes("verify_change")) return
+      if (!name.includes("verify_change") && !name.includes("run_task_cases")) return
       const rendered = JSON.stringify(output)
       if (rendered.includes("NOT EQUIVALENT")) {
         await toast("DIVERGENCE CAUGHT", "The runtime found behavior the model missed", "error", 2600)
+      } else if (rendered.includes("NO VERDICT")) {
+        await toast("NO VERDICT", "Execution did not produce trustworthy proof", "warning", 2800)
       } else if (rendered.includes("EQUIVALENT")) {
         await toast("PROOF COMPLETE", "All exercised outputs and global state matched", "success", 2600)
       }

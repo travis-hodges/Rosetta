@@ -27,40 +27,15 @@ jobs:
           node-version: "22"
           cache: npm
 
-      # A tag must not be able to publish a red tree.
-      #
-      # Three modules are excluded, and this is not a shrug: test_install and
-      # test_rescue assert the `code`/`eval`/`models` commands and the JSON `doctor`
-      # that 6d3109e removed, and test_gui correctly reports that the GUI palette has
-      # drifted from the site. All three are tracked in docs/DISTRIBUTION.md section
-      # 3.0. The list is built by subtraction, so a NEW test file is gated
-      # automatically rather than silently skipped -- and the next step fails if an
-      # excluded module starts passing, so the exclusion cannot quietly outlive the bug.
+      # A tag must not be able to publish a red tree. The release runs the same
+      # complete Python discovery gate as CI so a newly added test is included
+      # automatically.
       - name: Check
         run: |
           python -m compileall -q rosetta tests
-
-          KNOWN_BROKEN="test_install test_rescue test_gui"
-          modules=""
-          for file in tests/test_*.py; do
-            name="$(basename "$file" .py)"
-            case " $KNOWN_BROKEN " in *" $name "*) continue ;; esac
-            modules="$modules tests.$name"
-          done
-          echo "Gating on:$modules"
-          python -m unittest $modules
-
-          node --test tests/web.test.mjs
+          python -m unittest discover -s tests
+          npm test
           node scripts/build.mjs
-
-      - name: Known-broken exclusions must still be necessary
-        run: |
-          for name in test_install test_rescue test_gui; do
-            if python -m unittest "tests.$name" >/dev/null 2>&1; then
-              echo "::error::tests/$name.py passes now. Remove it from KNOWN_BROKEN in this workflow."
-              exit 1
-            fi
-            echo "still failing as documented: tests/$name.py"
           done
 
       - name: Tag must match rosetta.__version__

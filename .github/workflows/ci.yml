@@ -26,6 +26,5 @@ jobs:
           python -m unittest discover -s tests -v
       - name: Build landing page
         run: |
-          node --test tests/web.test.mjs
+          npm test
           node scripts/build.mjs
-
