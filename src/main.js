@@ -128,12 +128,14 @@ const tabOrientation = matchMedia('(max-width: 760px)');
 function syncTabOrientation() { document.querySelector('.language-tabs').setAttribute('aria-orientation', tabOrientation.matches ? 'horizontal' : 'vertical'); }
 tabOrientation.addEventListener('change', syncTabOrientation);
 syncTabOrientation();
-// The install command must name the host actually serving this page, so it is
-// templated in the markup and filled in here. Hard-coding a domain is how a page
-// ends up telling people to curl a host that does not resolve.
+// The install command must include the directory actually serving this page.
+// GitHub Pages project sites live below /<repository>/, while Vercel serves this
+// same build from /. Resolving against the document supports both hosts.
 document.querySelectorAll('[data-origin-command]').forEach(node => {
-  const origin = location.protocol === 'file:' ? 'https://rosetta-legacy.vercel.app' : location.origin;
-  const command = node.dataset.originCommand.replace('{origin}', origin);
+  const siteBase = location.protocol === 'file:'
+    ? 'https://rosetta-legacy.vercel.app'
+    : new URL('./', location.href).href.replace(/\/$/, '');
+  const command = node.dataset.originCommand.replace('{origin}', siteBase);
   node.textContent = command;
   const button = node.closest('.command-row')?.querySelector('[data-copy]');
   if (button) button.dataset.copy = command;

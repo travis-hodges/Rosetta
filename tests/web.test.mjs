@@ -15,7 +15,7 @@ const PAGES = [
   { file: 'index.html', module: 'src/main.js' },
   { file: 'download.html', module: 'src/download.js' },
 ];
-const DIRECTORY_ROUTES = new Set(['/slideshow']);
+const DIRECTORY_ROUTES = new Set(['/slideshow', './slideshow/']);
 for (const page of PAGES) {
   page.html = await read(page.file);
   page.script = await read(page.module);
@@ -56,6 +56,7 @@ const ALLOWED_ORIGINS = [
   'github.com',                                  // the repository
   'www.gao.gov', 'department.va.gov',            // cited sources
   'www.w3.org', 'openapi.vercel.sh',             // schema namespaces
+  'travis-hodges.github.io',                     // canonical GitHub Pages preview image
 ];
 
 test('every external origin the page reaches is declared', () => {
@@ -88,9 +89,18 @@ test('in-page navigation targets real sections', () => {
 
 test('every public footer links to the slideshow', () => {
   for (const { file, html: markup } of PAGES) {
-    assert.match(markup, /<footer\b[\s\S]*href="\/slideshow"[^>]*>Slideshow ↗<\/a>/,
+    assert.match(markup, /<footer\b[\s\S]*href="\.\/slideshow\/"[^>]*>Slideshow ↗<\/a>/,
       `${file}: footer must link to /slideshow`);
   }
+});
+
+test('project-site URLs stay inside the GitHub Pages repository path', () => {
+  for (const { file, html: markup, script: source } of PAGES) {
+    assert.doesNotMatch(markup, /(?:href|src)="\/(?!\/)/, `${file}: root-relative asset or route escapes /Rosetta/`);
+    assert.match(source, /new URL\('\.\/', location\.href\)/,
+      `${file}: runtime URLs must preserve a GitHub Pages project path`);
+  }
+  assert.match(html, /https:\/\/travis-hodges\.github\.io\/Rosetta\/og\.png/);
 });
 
 test('every element each page script drives is present in that page', () => {
@@ -234,7 +244,7 @@ test('the build produces a servable site and unknown paths 404', async t => {
   assert.equal(page.status, 200, '/download must resolve via cleanUrls');
   assert.match(await page.text(), /id="release-panel"/);
 
-  const slideshowPage = await fetch(base + '/slideshow');
+  const slideshowPage = await fetch(base + '/slideshow/');
   assert.equal(slideshowPage.status, 200, '/slideshow must resolve via cleanUrls');
   assert.match(await slideshowPage.text(), /id="deck"/);
   for (const path of ['/slideshow/pitch.css', '/slideshow/pitch.js']) {
