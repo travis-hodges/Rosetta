@@ -82,7 +82,7 @@ Verified on this machine against a live WorldVistA container. Commands are runna
 | | Status |
 |---|---|
 | **The verifier** | `python3 -m rosetta.core.selftest` — passes in ~2.5s |
-| **MCP tool server** | 8 tools over stdio; `opencode mcp list` reports `rosetta connected` |
+| **MCP tool server** | 8 tools over stdio; `rosetta mcp list` reports `rosetta connected` |
 | **The side-by-side** | `python3 -m rosetta.demo` — runs offline, no container, no network |
 | **Mutation generator** | 8 operators; 0.00% defect rate measured against the real YottaDB compiler |
 | **Split lock** | Written and frozen: 350 train / 150 eval, partitioned by duplicate cluster |
@@ -144,9 +144,10 @@ with `launchctl enable` only after confirming which checkout its plist points at
 
 ## Website
 
-The product website lives in [`web/index.html`](web/index.html): one self-contained,
-offline-capable HTML file with inline CSS, JavaScript, and original vector/canvas artwork.
-Open it directly in a browser, or serve it locally with Node 22+:
+The landing page is [`index.html`](index.html) plus [`src/styles.css`](src/styles.css) and
+[`src/main.js`](src/main.js): a single scrolling page with original canvas artwork, served
+as plain static files. There is no bundler and no package installation; Node 22+ is needed
+only for the optional server, build, and tests:
 
 ```bash
 npm run dev
@@ -155,9 +156,11 @@ npm run build
 npm run preview
 ```
 
-No package installation is needed. The optional build copies the site to `dist/` for
-Vercel. Views use hash routes so they work offline.
+`npm run build` copies the page, `src/`, and `public/` into `dist/`, which is what Vercel
+publishes. It parses `src/main.js` and checks every local asset the page references, so a
+syntax error or a dead path fails the build rather than the first visitor's browser.
 
-See [`web/README.md`](web/README.md) for release links, account integration, the benchmark
-report contract, and verification limits. Login and installers stay explicitly unavailable
-until real services and release artifacts are configured.
+Typography loads Space Grotesk and Space Mono from the Google Fonts CDN; everything else is
+local. The benchmark contract is enforced by the producer in
+[`rosetta/bench/report.py`](rosetta/bench/report.py) — the page states that published
+results are pending and never hand-authors performance values.
