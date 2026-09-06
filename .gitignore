@@ -14,3 +14,7 @@ data/snapshots/
 # offline path depends on it surviving a clone.
 results/*
 !results/canned/
+
+# Per-machine model registry. A clone starts with nothing registered,
+# and nobody else's model list belongs in a pull request.
+data/models.json
