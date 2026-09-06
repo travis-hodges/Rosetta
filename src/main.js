@@ -132,7 +132,8 @@ syncTabOrientation();
 // templated in the markup and filled in here. Hard-coding a domain is how a page
 // ends up telling people to curl a host that does not resolve.
 document.querySelectorAll('[data-origin-command]').forEach(node => {
-  const command = node.dataset.originCommand.replace('{origin}', location.origin);
+  const origin = location.protocol === 'file:' ? 'https://rosetta-legacy.vercel.app' : location.origin;
+  const command = node.dataset.originCommand.replace('{origin}', origin);
   node.textContent = command;
   const button = node.closest('.command-row')?.querySelector('[data-copy]');
   if (button) button.dataset.copy = command;

@@ -32,16 +32,18 @@ test('every page module parses without a bundler', () => {
 
 test('every local asset every page references exists', async () => {
   for (const { file, html: markup, module } of PAGES) {
-    const references = [...markup.matchAll(/(?:href|src)="(\/[^"#?]+)"/g)].map(match => match[1]);
-    assert.ok(references.includes(`/${module}`), `${file} must load /${module}`);
-    assert.ok(references.includes('/src/styles.css'), `${file} must load the stylesheet`);
+    const references = [...markup.matchAll(/(?:href|src)="((?:\.\/|\/)[^"#?]+)"/g)].map(match => match[1]);
+    const normalized = references.map(reference => reference.replace(/^\.\//, '/'));
+    assert.ok(normalized.includes(`/${module}`), `${file} must load ${module}`);
+    assert.ok(normalized.includes('/src/styles.css'), `${file} must load the stylesheet`);
     for (const reference of references) {
+      const path = reference.replace(/^(?:\.\/|\/)/, '');
       // Clean URLs: /download is a page route, not a file on disk.
-      if (PAGES.some(page => page.file === `${reference.slice(1)}.html`)) continue;
+      if (PAGES.some(page => page.file === `${path}.html`) || PAGES.some(page => page.file === path)) continue;
       // build.mjs flattens public/ onto the site root, so /favicon.svg is public/favicon.svg.
       // Resolve the same two ways it does, or the build passes while this fails.
-      await readFile(new URL(reference.slice(1), site))
-        .catch(() => readFile(new URL(`public/${reference.slice(1)}`, site)))
+      await readFile(new URL(path, site))
+        .catch(() => readFile(new URL(`public/${path}`, site)))
         .catch(() => { throw new Error(`${file} references ${reference}, which does not exist`); });
     }
   }
