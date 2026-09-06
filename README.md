@@ -31,6 +31,34 @@ architecture, frozen contract, benchmark methodology, build plan, and pitch.
 
 ---
 
+## Start here
+
+One command, five workflows. Every command prints the next one.
+
+```bash
+export PATH="$PWD/bin:$PATH"
+rosetta            # the map: what is wired on this machine, and what is not
+rosetta doctor     # can this machine actually run the verifier
+```
+
+| | |
+|---|---|
+| `rosetta edit ROUTINE -m "..."` | change a routine with the verifier in the loop |
+| `rosetta verify ROUTINE -c f.m` | check a change you already made (exit 1 on divergence) |
+| `rosetta model add NAME id` | bring your own model |
+| `rosetta bench run --model NAME` | measure it on the held-out eval set |
+| `rosetta train sft` | turn verified work into training data |
+| `rosetta gui` | all five of those in a browser, on a loopback port |
+
+📖 **[`docs/WORKFLOWS.md`](docs/WORKFLOWS.md)** walks all five end to end, in
+both the terminal and the GUI, and marks exactly what is live and what is
+specified but unbuilt.
+
+The old `python3 -m rosetta.*` entry points all still work and keep their own
+flags; `rosetta` passes anything it does not recognise straight through.
+
+---
+
 ## Not to be confused with: the orchestrator
 
 This repository also contains a **separate build service** in [`orchestration/`](orchestration/):
@@ -60,6 +88,7 @@ Verified on this machine against a live WorldVistA container. Commands are runna
 | **Split lock** | Written and frozen: 350 train / 150 eval, partitioned by duplicate cluster |
 | **Comprehension labels** | 1,493 pairs from the train split, plus the RFT grader |
 | **Benchmark results** | **None published.** No full run has happened yet. |
+| **The GUI** | `rosetta gui` — verify, edit, models and runs, loopback only |
 
 The load-bearing demonstration is in the selftest: a `CMP_FLIP` injected into a real VistA
 routine is caught by diffing global state, and the report names the exact node that moved —
@@ -79,7 +108,8 @@ written only by a real run.
 ## Working in this repository
 
 Agents and contributors read [`AGENTS.md`](AGENTS.md) first, then
-[`docs/PROJECT.md`](docs/PROJECT.md). Claude sessions additionally read
+[`docs/PROJECT.md`](docs/PROJECT.md) for the architecture and
+[`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) for the surface. Claude sessions additionally read
 [`CLAUDE.md`](CLAUDE.md).
 
 The hard rules that protect every published number:

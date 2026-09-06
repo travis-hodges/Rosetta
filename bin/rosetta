@@ -1,0 +1,10 @@
+#!/bin/sh
+# The `rosetta` command. Put this directory on your PATH:
+#
+#     export PATH="$PWD/bin:$PATH"
+#
+# It resolves the repository from its own location rather than the working
+# directory, so `rosetta` works from anywhere -- including from an editor's
+# MCP launch, where the working directory is not yours to choose.
+here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m rosetta "$@"
