@@ -99,7 +99,8 @@ class TerminalTests(unittest.TestCase):
             self.assertIn("local", config["provider"])
             self.assertNotEqual(Path(agent._workdir()), cli.ROOT)
             self.assertEqual(agent._environment()["PWD"], agent._workdir())
-            command = agent._command("example")
+            with patch("rosetta.demo.agents.shutil.which", return_value="/usr/bin/opencode"):
+                command = agent._command("example")
             self.assertEqual(command[command.index("--dir") + 1], agent._workdir())
         finally:
             agent.close()
