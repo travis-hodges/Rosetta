@@ -1,5 +1,8 @@
-"""Run the Rosetta terminal entry point without installing a package."""
+"""``python3 -m rosetta`` -- the front door. See :mod:`rosetta.cli`."""
 
-from .cli import main
+from __future__ import annotations
 
-raise SystemExit(main())
+from rosetta.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

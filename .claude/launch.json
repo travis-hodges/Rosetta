@@ -11,6 +11,18 @@
       ],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "rosetta-gui",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "rosetta.gui",
+        "--port",
+        "7391",
+        "--no-open"
+      ],
+      "port": 7391
     }
   ]
 }
