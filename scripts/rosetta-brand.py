@@ -12,6 +12,19 @@ boundary -- never inside a string literal -- so the bundle's byte offsets stay
 exactly where Bun's loader expects them. The original binary is copied to
 <binary>.rosetta-orig before the first write, and `--revert` puts it back.
 
+The FILE, however, does not keep its original size, and comparing sizes is not
+a valid way to check whether the patch is sound. Patching invalidates the code
+signature, so the binary is re-signed ad hoc afterwards, and that replaces the
+signature blob wholesale. The stock binary ships linker-signed with 4 KB page
+hashes; an ad-hoc re-sign uses a larger page size, so the CodeDirectory shrinks
+substantially -- measured on 1.18.29 (arm64) the file lost 837,666 bytes, of
+which 837,716 is CodeDirectory (1,117,214 -> 279,498, 34,910 -> 8,728 hashes).
+The bundle itself is unchanged in length.
+
+To verify a patch, compare the sha256 values recorded in
+<binary>.rosetta-brand.json against the backup and the live binary, or run
+`--check`. Do not compare file sizes.
+
 Only cosmetic strings are touched. Provider ids, config paths (~/.config/opencode,
 opencode.json, .opencode/), package names, mDNS defaults, HTTP headers and auth
 paths are deliberately left alone: renaming those breaks the tool.

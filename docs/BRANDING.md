@@ -69,6 +69,18 @@ paren, never inside a literal — which JavaScript ignores and the loader's offs
 notice. The script refuses any patch that would grow the file or that changes its trailing
 delimiter.
 
+That invariant covers the **bundle**, not the file. Patching invalidates the code
+signature, so the binary is re-signed ad hoc, which replaces the signature blob outright.
+The stock binary ships linker-signed with 4 KB page hashes; an ad-hoc re-sign uses a larger
+page size and produces a much smaller CodeDirectory. On 1.18.29 (arm64) the file came out
+837,666 bytes *smaller* than the original, essentially all of it CodeDirectory
+(1,117,214 → 279,498 bytes, 34,910 → 8,728 hashes).
+
+So **do not compare file sizes to decide whether the patch is sound** — they are expected
+to differ, and the difference is large enough to look alarming. Compare the sha256 values
+in `opencode.exe.rosetta-brand.json` against the backup and the live binary, or run
+`--check`.
+
 Around that:
 
 - the pristine binary is copied to `opencode.exe.rosetta-orig` before the first write, and
