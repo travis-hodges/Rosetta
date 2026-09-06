@@ -1,4 +1,4 @@
-"""``rosetta`` -- one front door for the five things you can do here.
+"""``rosetta`` -- the OpenCode-derived TUI and one front door for Rosetta.
 
 Before this module there were eleven entry points (``python3 -m
 rosetta.core.selftest``, ``python3 -m rosetta.bench.build``, ``python3 -m
@@ -7,39 +7,45 @@ wanted. The modules were fine; the surface was the problem. This file adds no
 capability. It names the five workflows in the words a user would use, and
 every command ends by printing the next one.
 
-    rosetta                     what is wired, what is not, what to run next
+    rosetta                     open the Rosetta TUI in the current project
+    rosetta status              what is wired, what is not, what to run next
     rosetta doctor              can this machine actually do the work
     rosetta edit ROUTINE        change a routine with the verifier in the loop
     rosetta verify ROUTINE      check a change you already made
     rosetta model add ...       bring your own model
     rosetta bench run           measure a model on the held-out eval set
     rosetta train sft           turn verified work into training data
-    rosetta gui                 all five of those, in a browser
+    rosetta gui                 optional browser view over the same workflows
 
 Two rules this module keeps, because it is the first thing anyone touches:
 
   * It never fakes a capability. A step that is not wired says so and names
     what is missing -- the same discipline the website keeps by showing a
     pending state instead of a placeholder number.
-  * ``rosetta`` and ``rosetta --help`` work offline, with no container, no
-    network and no credentials. Everything that needs those is imported inside
-    the handler that needs it.
+  * ``rosetta --help`` and ``rosetta status`` work offline, with no container,
+    network or credentials. Everything that needs those is imported inside the
+    handler that needs it.
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict, fields
 import json
+import math
 import os
+import shlex
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT  # compatibility for source-install callers
 
-# The five workflows, in the order they are usually met. `rosetta` with no
-# arguments prints this, and it is the same order used in docs/WORKFLOWS.md.
+# The five workflows, in the order they are usually met. The status command
+# prints this, and it is the same order used in docs/WORKFLOWS.md.
 WORKFLOWS: tuple[tuple[str, str, str], ...] = (
     ("edit", "Change a routine, verified", "rosetta edit DPTLK --request '...'"),
     ("verify", "Check a change you already made", "rosetta verify DPTLK -c new.m"),
@@ -47,6 +53,145 @@ WORKFLOWS: tuple[tuple[str, str, str], ...] = (
     ("bench", "Measure a model on held-out tasks", "rosetta bench run --model my-model"),
     ("train", "Turn verified work into training data", "rosetta train sft"),
 )
+
+
+# --------------------------------------------------------------------------
+# Primary TUI
+# --------------------------------------------------------------------------
+
+def _opencode() -> str:
+    binary = shutil.which("opencode")
+    if not binary:
+        raise ValueError("OpenCode is not installed. Install OpenCode, then run rosetta again.")
+    return binary
+
+
+def _command_profiles() -> dict[str, dict[str, object]]:
+    """Inline Rosetta slash commands when the TUI opens another project."""
+    commands: dict[str, dict[str, object]] = {}
+    launcher = (
+        f"PYTHONPATH={shlex.quote(str(REPO_ROOT))} "
+        f"{shlex.quote(sys.executable)} -m rosetta"
+    )
+    for path in sorted((REPO_ROOT / ".opencode" / "command").glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        if not text.startswith("---\n") or "\n---\n" not in text[4:]:
+            raise ValueError(f"Invalid OpenCode command profile: {path}")
+        header, template = text[4:].split("\n---\n", 1)
+        entry: dict[str, object] = {
+            "template": template.strip().replace("python3 -m rosetta", launcher)
+        }
+        for line in header.splitlines():
+            if not line.strip():
+                continue
+            if ":" not in line:
+                raise ValueError(f"Invalid OpenCode command metadata in {path}: {line}")
+            key, value = (part.strip() for part in line.split(":", 1))
+            if key not in {"description", "agent", "subtask"}:
+                raise ValueError(f"Unsupported OpenCode command field {key!r} in {path}")
+            entry[key] = value.lower() == "true" if key == "subtask" else value
+        commands[path.stem] = entry
+    return commands
+
+
+def _config() -> dict[str, Any]:
+    """Build a portable OpenCode config without writing into the target project."""
+    path = REPO_ROOT / "opencode.json"
+    if not path.is_file():
+        raise ValueError(
+            "Coding requires a source checkout. Reinstall the launcher from that checkout."
+        )
+    config = json.loads(path.read_text(encoding="utf-8"))
+    config["mcp"]["rosetta"]["command"] = [sys.executable, "-m", "rosetta.tools"]
+    config["mcp"]["rosetta"].setdefault("environment", {})["PYTHONPATH"] = str(REPO_ROOT)
+    config["instructions"] = [str(REPO_ROOT / ".opencode" / "instructions.md")]
+    for name in ("rosetta", "explain", "divergence"):
+        profile = REPO_ROOT / ".opencode" / "agent" / f"{name}.md"
+        prompt = profile.read_text(encoding="utf-8").split("---", 2)[-1].strip()
+        config.setdefault("agent", {}).setdefault(name, {})["prompt"] = prompt
+    config["command"] = _command_profiles()
+    return config
+
+
+def _merge_user_config(config: dict[str, Any], raw: str) -> dict[str, Any]:
+    """Preserve user config while reserving Rosetta's named integration points."""
+    supplied = json.loads(raw)
+    if not isinstance(supplied, dict):
+        raise ValueError("OPENCODE_CONFIG_CONTENT must contain a JSON object.")
+    reserved = {key: config.get(key, {}) for key in ("mcp", "agent", "command")}
+    config.update(
+        {
+            key: value
+            for key, value in supplied.items()
+            if key not in reserved and key not in {"instructions", "default_agent"}
+        }
+    )
+    for key, rosetta_entries in reserved.items():
+        user_entries = supplied.get(key, {})
+        if user_entries is not None and not isinstance(user_entries, dict):
+            raise ValueError(f"OPENCODE_CONFIG_CONTENT {key!r} must be an object.")
+        config[key] = {**(user_entries or {}), **rosetta_entries}
+    user_instructions = supplied.get("instructions", [])
+    if not isinstance(user_instructions, list) or not all(
+        isinstance(item, str) for item in user_instructions
+    ):
+        raise ValueError("OPENCODE_CONFIG_CONTENT 'instructions' must be an array of strings.")
+    config["instructions"] = [*user_instructions, *config.get("instructions", [])]
+    config["default_agent"] = "rosetta"
+    return config
+
+
+def cmd_tui(args: argparse.Namespace) -> int:
+    """Open the branded OpenCode TUI with every Rosetta workflow attached."""
+    try:
+        project = args.project.expanduser().resolve()
+        if not project.is_dir():
+            raise ValueError(f"Project directory does not exist: {project}")
+        if args.timeout is not None and args.prompt is None:
+            raise ValueError("--timeout requires --prompt; interactive sessions have no time limit.")
+        env = os.environ.copy()
+        env["PWD"] = str(project)
+        env["ROSETTA_PROJECT_DIR"] = str(project)
+        corpus = args.corpus.expanduser().resolve() if args.corpus else Path(
+            env.get("ROSETTA_CORPUS_DIR", project)
+        ).expanduser().resolve()
+        if not corpus.is_dir():
+            raise ValueError(f"Corpus directory does not exist: {corpus}")
+        env["ROSETTA_CORPUS_DIR"] = str(corpus)
+
+        config = _config()
+        if env.get("OPENCODE_CONFIG_CONTENT"):
+            config = _merge_user_config(config, env["OPENCODE_CONFIG_CONTENT"])
+        mcp_env = config["mcp"]["rosetta"].setdefault("environment", {})
+        mcp_env["ROSETTA_CORPUS_DIR"] = str(corpus)
+        mcp_env["ROSETTA_PROJECT_DIR"] = str(project)
+        env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
+
+        command = [_opencode()]
+        if args.prompt is None:
+            command.append(str(project))
+        else:
+            command.extend(["run", "--dir", str(project)])
+        command.extend(["--agent", "rosetta"])
+        if args.model:
+            from rosetta import models as model_registry
+
+            command.extend(["--model", model_registry.resolve(args.model) or args.model])
+        if args.prompt is not None:
+            command.extend(["--", args.prompt])
+        try:
+            return subprocess.run(
+                command,
+                cwd=project,
+                env=env,
+                timeout=(args.timeout or 300.0) if args.prompt is not None else None,
+            ).returncode
+        except subprocess.TimeoutExpired:
+            print("ERROR: OpenCode prompt exceeded its time limit.", file=sys.stderr)
+            return 124
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
 
 # --------------------------------------------------------------------------
@@ -206,7 +351,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(_yes("opencode on PATH") if shutil.which("opencode")
           else _no("opencode not on PATH — needed to drive any model"))
 
-    _next("rosetta gui           # the same five workflows in a browser",
+    _next("rosetta               # open the primary TUI in this project",
+          "rosetta gui           # optional browser view",
           "rosetta doctor        # check the verifier can actually run",
           "rosetta demo          # the side-by-side, offline, 60 seconds")
     return 0
@@ -593,6 +739,107 @@ def cmd_selftest(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
+# Compatibility surfaces used by the TUI command palette
+# --------------------------------------------------------------------------
+
+def cmd_models(args: argparse.Namespace) -> int:
+    """Expose OpenCode's model catalogue without hiding its exit status."""
+    try:
+        command = [_opencode(), "models"]
+        if args.provider:
+            command.append(args.provider)
+        return subprocess.run(command).returncode
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Short spelling retained for the TUI's ``/report`` command."""
+    return _delegate("rosetta.bench.report", list(args.extra))
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    """Compare two complete sources against explicitly supplied cases."""
+    from rosetta.core import ExecSpec, shutdown, verify_equivalence
+    from rosetta.tools.cases import spec_from_dict
+    from rosetta.tools.sources import normalise_name
+
+    try:
+        for source in (args.baseline, args.candidate, args.cases):
+            if not source.is_file():
+                raise ValueError(f"Input file does not exist: {source}")
+        if args.out:
+            for source in (args.baseline, args.candidate, args.cases):
+                if args.out.resolve() == source.resolve() or (
+                    args.out.exists() and args.out.samefile(source)
+                ):
+                    raise ValueError(
+                        "--out must not overwrite baseline, candidate, or cases "
+                        "(including file aliases)."
+                    )
+
+        document = json.loads(args.cases.read_text(encoding="utf-8"))
+        cases = document.get("cases") if isinstance(document, dict) else document
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(
+                "Cases must be a nonempty JSON array (or an object with a cases array)."
+            )
+        specs = []
+        allowed = {field.name for field in fields(ExecSpec)}
+        for index, case in enumerate(cases):
+            if not isinstance(case, dict) or set(case) - allowed:
+                raise ValueError(
+                    f"Case {index + 1} must be an object containing only ExecSpec fields."
+                )
+            if not isinstance(case.get("routine"), str):
+                raise ValueError(
+                    f"Case {index + 1} must name its routine as a string."
+                )
+            normalise_name(case["routine"])
+            timeout = case.get("timeout_s", 10.0)
+            if (
+                isinstance(timeout, bool)
+                or not isinstance(timeout, (int, float))
+                or not (0 < timeout <= sys.float_info.max)
+            ):
+                raise ValueError(
+                    f"Case {index + 1} timeout_s must be a finite positive number."
+                )
+            specs.append(spec_from_dict(case))
+
+        stem = args.baseline.stem
+        inferred = "%" + stem[1:] if stem.startswith("_") else stem
+        routine = normalise_name(args.routine or inferred)
+        if any(spec.routine != routine for spec in specs):
+            raise ValueError("Every case must name the evaluated routine.")
+
+        report = verify_equivalence(
+            routine,
+            args.baseline.read_text(encoding="utf-8"),
+            args.candidate.read_text(encoding="utf-8"),
+            specs,
+        )
+        rendered = json.dumps(asdict(report), indent=2)
+        if args.out:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(rendered + "\n", encoding="utf-8")
+        print(rendered)
+        return (
+            0
+            if report.equivalent
+            and report.n_void == 0
+            and report.n_cases == len(specs)
+            else 1
+        )
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        shutdown()
+
+
+# --------------------------------------------------------------------------
 # Parser
 # --------------------------------------------------------------------------
 
@@ -601,11 +848,21 @@ def _remainder(p: argparse.ArgumentParser, label: str) -> None:
                    help=f"passed straight through to {label}; try `-- --help`")
 
 
+def _positive_seconds(value: str) -> float:
+    try:
+        seconds = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a finite positive number") from exc
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise argparse.ArgumentTypeError("must be a finite positive number")
+    return seconds
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="rosetta",
         description="Verified modification of code nobody can read.",
-        epilog="Run `rosetta` with no arguments for the map.",
+        epilog="Run `rosetta` with no arguments to open the TUI in this project.",
     )
     ap.add_argument("--plain", action="store_true", help="no banner")
     sub = ap.add_subparsers(dest="cmd")
@@ -620,6 +877,25 @@ def build_parser() -> argparse.ArgumentParser:
         q = sub.add_parser(name, help=help_text)
         q.add_argument("--plain", action="store_true", default=argparse.SUPPRESS,
                        help="no banner")
+
+    for name, help_text in (
+        ("tui", "open the Rosetta TUI in a project"),
+        ("code", "alias for tui"),
+    ):
+        p = sub.add_parser(name, help=help_text)
+        p.add_argument("project", nargs="?", type=Path, default=Path.cwd())
+        p.add_argument(
+            "--model",
+            default=os.environ.get("ROSETTA_MODEL"),
+            help="registered name or provider/model",
+        )
+        p.add_argument("--corpus", type=Path, help="MUMPS routine corpus (default: project)")
+        p.add_argument("--prompt", help="run one prompt instead of opening interactively")
+        p.add_argument(
+            "--timeout",
+            type=_positive_seconds,
+            help="prompt time limit in seconds (default 300; requires --prompt)",
+        )
 
     p = sub.add_parser("edit", help="change a routine with the verifier in the loop")
     p.add_argument("routine")
@@ -698,10 +974,25 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("selftest", help="prove the verifier works on this machine")
     _remainder(p, "rosetta.core.selftest")
 
+    p = sub.add_parser("models", help="list models available through OpenCode")
+    p.add_argument("provider", nargs="?")
+
+    p = sub.add_parser("eval", help="compare baseline and candidate source with a case suite")
+    p.add_argument("--baseline", type=Path, required=True)
+    p.add_argument("--candidate", type=Path, required=True)
+    p.add_argument("--cases", type=Path, required=True)
+    p.add_argument("--routine")
+    p.add_argument("--out", type=Path)
+
+    p = sub.add_parser("report", help="alias for bench report")
+    _remainder(p, "rosetta.bench.report")
+
     return ap
 
 
 _HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "tui": cmd_tui,
+    "code": cmd_tui,
     "status": cmd_status,
     "doctor": cmd_doctor,
     "edit": cmd_edit,
@@ -713,12 +1004,22 @@ _HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "gui": cmd_gui,
     "mcp": cmd_mcp,
     "selftest": cmd_selftest,
+    "models": cmd_models,
+    "eval": cmd_eval,
+    "report": cmd_report,
 }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    raw = list(argv if argv is not None else sys.argv[1:])
+    if not raw:
+        raw = ["tui"]
+    elif raw[0] not in _HANDLERS and raw[0] not in {"-h", "--help", "--plain"}:
+        # A path (or TUI option) is the common case, so `rosetta ../project`
+        # is shorthand for `rosetta tui ../project`.
+        raw = ["tui", *raw]
     ap = build_parser()
-    args = ap.parse_args(list(argv) if argv is not None else None)
+    args = ap.parse_args(raw)
     handler = _HANDLERS.get(args.cmd or "status")
     if handler is None:  # unreachable while _HANDLERS covers every subparser
         ap.print_help()

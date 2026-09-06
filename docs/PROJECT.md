@@ -6,6 +6,8 @@
 
 Rosetta is a terminal coding environment built on OpenCode, with configurable models
 (including user-supplied language specialists), executable evaluations, and benchmarks.
+The default product surface is the OpenCode-derived TUI: after installation, running
+`rosetta` inside any project opens that project with Rosetta's tools and workflows.
 The verification engine is a central component of that product. VA FOIA VistA is an
 optional public corpus, not a required identity or hardcoded customer environment.
 MUMPS/YottaDB is implemented; other runtime adapters and trained specialist weights are
@@ -1364,4 +1366,3 @@ minutes.
 *Figures cited from secondary sources (market sizing, migration failure rates, batch job
 counts) should be treated as indicative rather than precise. Primary GAO and DOL figures
 are as reported in the linked documents.*
-

@@ -15,3 +15,11 @@ runtime errors. A passing finite suite is evidence for those cases only.
 
 Do not manufacture benchmark scores, claim an unrun test passed, or hide a
 missing runtime. Model configuration alone does not demonstrate specialization.
+
+This TUI is Rosetta's primary interface. The project directory from which the
+user launched `rosetta` is the active workspace and, by default, the MUMPS
+routine corpus. Rosetta's secondary workflows are available from the `/`
+command menu: diagnostics, routine and global explanation, change verification,
+evaluation guidance, benchmarking, reports, and the recorded demo. Keep those
+workflows, including verified training-data generation, inside this session
+unless the user explicitly asks for the standalone CLI.

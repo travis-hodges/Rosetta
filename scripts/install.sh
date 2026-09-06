@@ -4,7 +4,8 @@ set -euo pipefail
 
 if [[ $# == 1 && ( "$1" == --help || "$1" == -h ) ]]; then
   echo 'Usage: bash scripts/install.sh --bin-dir PATH'
-  echo 'Creates PATH/rosetta. Keep this checkout and Python 3.11+ installed.'
+  echo 'Creates PATH/rosetta. Run `rosetta` from the project you want to open.'
+  echo 'Keep this checkout and Python 3.11+ installed.'
   echo 'Set ROSETTA_PYTHON to select an interpreter. Existing files are never overwritten.'
   exit 0
 fi
@@ -44,6 +45,7 @@ try:
 except OSError as exc:
     sys.exit(f"ERROR: Could not install launcher: {exc}")
 print(f"Installed {destination}")
-print(f"Run {shlex.quote(str(destination))} doctor")
+print(f"Run {shlex.quote(str(destination))} from the project you want to open.")
+print(f"Check setup with {shlex.quote(str(destination))} doctor")
 print(f"To use 'rosetta' by name, add {destination.parent} to your PATH.")
 PY

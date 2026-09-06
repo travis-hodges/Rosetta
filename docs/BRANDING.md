@@ -2,13 +2,14 @@
 
 Rosetta adopts OpenCode whole as the agent harness — [`docs/PROJECT.md` §5](PROJECT.md)
 rejects forking it, and nothing here forks it. What this does is rewrite the user-visible
-branding inside the already-installed binary and add a `rosetta` command that runs it.
+branding inside the already-installed binary and add a source-aware `rosetta`
+command that loads Rosetta's project workflows before it runs the harness.
 
 ```bash
 scripts/rosetta-brand.py
 ```
 
-That patches the installed executable and installs the command. Verify with
+That patches the installed executable and installs the launcher. Verify with
 `scripts/rosetta-brand.py --check`, preview the wordmark with `--print-logo`, and undo
 everything with `--revert`.
 
@@ -31,7 +32,7 @@ Commands:
 
 | Surface | Change |
 |---|---|
-| Command name | `rosetta` on PATH (symlink in `~/.local/bin`, or beside `opencode`) |
+| Command name | `rosetta` on PATH (source-aware launcher in `~/.local/bin`, or beside `opencode`) |
 | Usage output | yargs script name, every command and positional description |
 | Wordmark | new `r s t a` glyphs drawn in OpenCode's own 4×3 block font — plain, shaded, and the two-glyph monogram |
 | TUI home screen | shaded wordmark |
@@ -44,6 +45,11 @@ Commands:
 
 `opencode` still works and shows the same branding: it is the same binary, and Homebrew
 and npm need that name to stay.
+
+The command intentionally does not point straight at the OpenCode executable.
+It enters through Rosetta's Python launcher, which selects the current project
+as the default corpus and injects the Rosetta MCP server, agents, instructions
+and command palette. The branding script migrates the older direct symlink.
 
 ## What is deliberately left alone
 

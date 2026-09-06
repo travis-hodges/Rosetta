@@ -3,8 +3,8 @@
 
 OpenCode is adopted whole as the agent harness (docs/PROJECT.md §5 rejects
 forking it). This script does not fork anything: it rewrites the user-visible
-branding inside the already-installed single-file binary, and installs a
-`rosetta` command that runs it.
+branding inside the already-installed single-file binary, and installs the
+source-aware `rosetta` launcher that injects Rosetta's project workflows.
 
 Every edit is a byte-length-preserving in-place replacement inside the embedded
 JavaScript bundle. Shortened strings are padded with spaces at a JS token
@@ -57,6 +57,7 @@ BRAND = "Rosetta"
 brand = "rosetta"
 STATE_SUFFIX = ".rosetta-brand.json"
 BACKUP_SUFFIX = ".rosetta-orig"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # --------------------------------------------------------------------- the font
 #
@@ -71,6 +72,13 @@ BACKUP_SUFFIX = ".rosetta-orig"
 #
 # o/p/e/n/c/d are OpenCode's own glyphs and are only used to locate the existing
 # literals. r/s/t/a are new, drawn in the same idiom.
+#
+# A marker only ever describes an *enclosed* counter, so a glyph that has none
+# carries no markers and its marked form is just its plain form -- that is why
+# r, s and t are identical in both tables. Marking r's open right side (it was
+# once "█___" over "▀~~~") painted a shadow rectangle into the page and gave the
+# letter a bottom bar it does not have, which read as a filled blob rather than
+# an r. The invariants that catch this are checked in tests/test_install.py.
 
 PLAIN = {
     " ": ("    ", "    ", "    ", "    "),
@@ -94,7 +102,7 @@ MARKED = {
     "n": ("    ", "█▀▀▄", "█__█", "▀~~▀"),
     "c": ("    ", "█▀▀▀", "█___", "▀▀▀▀"),
     "d": ("   ▄", "█▀▀█", "█__█", "▀▀▀▀"),
-    "r": ("    ", "█▀▀▄", "█___", "▀~~~"),
+    "r": ("    ", "█▀▀▄", "█   ", "▀   "),
     "s": ("    ", "█▀▀▀", "▀▀▀█", "▀▀▀▀"),
     "t": (" ▄  ", "▀█▀▀", " █  ", " ▀▀ "),
     "a": ("    ", "▄▀▀█", "█^^█", "▀▀▀▀"),
@@ -119,6 +127,55 @@ def with_blank_lead(lines: list[str]) -> list[str]:
     if out[0].startswith(" "):
         out[0] = BLANK_LEAD + out[0][1:]
     return out
+
+
+# The colours the TUI actually paints the shaded wordmark with, read off the
+# escape stream of a running home screen: a dim half and a bright half, each
+# with its own shadow tone. Reproducing them here is the only way to preview
+# the marked glyphs -- printing them raw shows "_^~", not what a user sees.
+_DIM = ("\x1b[38;2;128;128;128m", "\x1b[48;2;40;40;40m", "\x1b[38;2;40;40;40m")
+_BRIGHT = ("\x1b[38;2;238;238;238m", "\x1b[48;2;67;67;67m", "\x1b[38;2;67;67;67m")
+_OFF = "\x1b[0m"
+
+
+def shaded(half: list[str], palette: tuple[str, str, str], color: bool) -> list[str]:
+    """Resolve one half's marked rows the way the TUI paints them.
+
+    Without colour the markers are resolved to their shapes only, which is
+    still enough to see a glyph that has grown a stroke it should not have.
+    """
+    ink, fill, shadow = palette
+    out = []
+    for row in half:
+        parts = []
+        for ch in row:
+            if ch == "_":
+                parts.append(f"{fill} {_OFF}" if color else " ")
+            elif ch == "^":
+                parts.append(f"{ink}{fill}\u2580{_OFF}" if color else "\u2580")
+            elif ch == "~":
+                parts.append(f"{shadow}\u2580{_OFF}" if color else "\u2580")
+            else:
+                parts.append(f"{ink}{ch}{_OFF}" if color else ch)
+        out.append("".join(parts))
+    return out
+
+
+def print_logo(color: bool) -> None:
+    """Both wordmarks: the plain CLI one, then the shaded TUI/home-screen one."""
+    print("plain (non-TTY CLI)")
+    for line in with_blank_lead(rows(PLAIN, brand)):
+        print("  " + line.replace(BLANK_LEAD, " "))
+    print()
+    print("shaded (CLI + TUI home)")
+    left = shaded(rows(MARKED, "ro"), _DIM, color)
+    right = shaded(rows(MARKED, "setta"), _BRIGHT, color)
+    for a, b in zip(left, right):
+        print("  " + a + " " + b)
+    print()
+    print("monogram (mini splash)")
+    for line in shaded(list(NEW_MARK_LEFT), _DIM, color):
+        print("  " + line)
 
 
 def jsstr(text: str) -> bytes:
@@ -343,15 +400,37 @@ def default_bin_dir(binary: Path) -> Path:
     return Path(shutil.which("opencode") or binary).parent
 
 
+def is_source_launcher(path: Path) -> bool:
+    launcher = REPO_ROOT / "bin" / "rosetta"
+    if path.is_symlink():
+        return path.resolve() == launcher.resolve()
+    if not path.is_file():
+        return False
+    try:
+        return b"from rosetta.cli import main" in path.read_bytes()[:4096]
+    except OSError:
+        return False
+
+
 def install_command(binary: Path, bin_dir: Path | None) -> Path:
     target = (bin_dir or default_bin_dir(binary)).expanduser()
     target.mkdir(parents=True, exist_ok=True)
     link = target / brand
+    launcher = REPO_ROOT / "bin" / "rosetta"
+    if not launcher.is_file():
+        sys.exit(f"source-aware launcher is missing: {launcher}")
     if link.is_symlink() or link.exists():
-        if link.is_symlink() and Path(os.readlink(link)).name == binary.name:
+        if is_source_launcher(link):
             return link
-        link.unlink()
-    link.symlink_to(binary)
+        # Migrate the older branding script's direct binary alias. That alias
+        # looked right but bypassed the MCP, agents, instructions and commands.
+        if link.is_symlink() and link.resolve() == binary.resolve():
+            link.unlink()
+        elif link.is_file():
+            sys.exit(f"refusing to overwrite existing command: {link}")
+        else:
+            sys.exit(f"refusing to overwrite existing command: {link}")
+    link.symlink_to(launcher)
     return link
 
 
@@ -388,7 +467,7 @@ def cmd_check(binary: Path) -> int:
               "(an upgrade?). Re-run this script.")
         status = 1
     link = Path(shutil.which(brand) or "")
-    on_path = link.name == brand and link.resolve() == binary
+    on_path = link.name == brand and is_source_launcher(link)
     print(f"command  {link if on_path else 'not installed on PATH'}")
     return status
 
@@ -401,7 +480,9 @@ def cmd_revert(binary: Path) -> int:
     resign(binary)
     state_path(binary).unlink(missing_ok=True)
     link = Path(shutil.which(brand) or "")
-    if link.name == brand and link.is_symlink() and link.resolve() == binary:
+    if link.name == brand and link.is_symlink() and (
+        link.resolve() == binary or is_source_launcher(link)
+    ):
         link.unlink()
         print(f"removed {link}")
     print(f"restored {binary} from {backup.name}")
@@ -470,8 +551,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.print_logo:
-        for line in with_blank_lead(rows(PLAIN, brand)):
-            print(line.replace(BLANK_LEAD, " "))
+        print_logo(color=sys.stdout.isatty() and not os.environ.get("NO_COLOR"))
         return 0
 
     binary = find_binary(args.binary)

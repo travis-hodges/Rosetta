@@ -33,13 +33,26 @@ architecture, frozen contract, benchmark methodology, build plan, and pitch.
 
 ## Start here
 
-One command, five workflows. Every command prints the next one.
+Install the command once, then open Rosetta from the project you want to work on:
 
 ```bash
-export PATH="$PWD/bin:$PATH"
-rosetta            # the map: what is wired on this machine, and what is not
-rosetta doctor     # can this machine actually run the verifier
+bash scripts/install.sh --bin-dir "$HOME/.local/bin"
+cd /path/to/your/project
+rosetta
 ```
+
+That bare command opens Rosetta's branded, OpenCode-derived TUI in the current
+directory. It brings the Rosetta agent, verifier tools, operating instructions
+and slash-command workflows with it without writing configuration into your
+project. Type `/` inside the TUI to find routines, inspect globals, verify a
+candidate, evaluate files, run the demo, check the machine, benchmark a model,
+build training data or inspect a report.
+
+`rosetta /another/project` opens a different workspace. Use `--model` to
+choose a registered name or provider model, and `--corpus` when the MUMPS
+sources are not the project directory.
+
+The same workflows remain available as standalone commands:
 
 | | |
 |---|---|
@@ -48,14 +61,14 @@ rosetta doctor     # can this machine actually run the verifier
 | `rosetta model add NAME id` | bring your own model |
 | `rosetta bench run --model NAME` | measure it on the held-out eval set |
 | `rosetta train sft` | turn verified work into training data |
-| `rosetta gui` | all five of those in a browser, on a loopback port |
+| `rosetta gui` | optional browser view, on a loopback port |
 
-📖 **[`docs/WORKFLOWS.md`](docs/WORKFLOWS.md)** walks all five end to end, in
-both the terminal and the GUI, and marks exactly what is live and what is
-specified but unbuilt.
+📖 **[`docs/WORKFLOWS.md`](docs/WORKFLOWS.md)** walks all five end to end and
+shows how the TUI, standalone commands, MCP tools and optional browser view
+reach the same verifier.
 
-The old `python3 -m rosetta.*` entry points all still work and keep their own
-flags; `rosetta` passes anything it does not recognise straight through.
+The underlying `python3 -m rosetta.*` entry points still work and keep their
+own flags. `rosetta --help` lists the supported front-door aliases.
 
 ---
 
@@ -72,7 +85,8 @@ Verified on this machine against a live WorldVistA container. Commands are runna
 | **Split lock** | Written and frozen: 350 train / 150 eval, partitioned by duplicate cluster |
 | **Comprehension labels** | 1,493 pairs from the train split, plus the RFT grader |
 | **Benchmark results** | **None published.** No full run has happened yet. |
-| **The GUI** | `rosetta gui` — verify, edit, models and runs, loopback only |
+| **Default UI** | `rosetta` — branded OpenCode TUI, project-aware tools and workflow commands |
+| **Browser view** | `rosetta gui` — verify, edit, models and runs, loopback only |
 
 The load-bearing demonstration is in the selftest: a `CMP_FLIP` injected into a real VistA
 routine is caught by diffing global state, and the report names the exact node that moved —

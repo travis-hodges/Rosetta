@@ -1,14 +1,23 @@
 # Terminal workflow
 
-Run commands from the source checkout, or install a dependency-free launcher with
+Install a dependency-free launcher with
 `bash scripts/install.sh --bin-dir "$HOME/.local/bin"`. The installer never overwrites an
 existing file or changes your shell settings. Keep the checkout and interpreter in place.
 Optional pip editable installation is also supported by the package metadata.
-`python3 -m rosetta --help` lists commands; each command has its own `--help`.
+Then `cd` to a project and run `rosetta`. That opens the branded OpenCode TUI with the
+Rosetta agent, MCP tools, instructions, and slash commands injected in memory; it does not
+write `.opencode` files into the project. `rosetta /another/project` opens a different
+directory. `rosetta --help` lists the secondary CLI workflows.
+
+Inside the TUI, type `/` to discover the Rosetta workflows. `/routine`, `/globals`, and
+`/verify` use the project-facing analysis and verifier tools. `/evaluate`, `/doctor`,
+`/benchmark`, and `/report` expose the standalone workflows without leaving the coding
+session. `/train` builds verified training artifacts without external submission. `/demo`
+is the recorded side-by-side and is labelled as demonstration evidence.
 
 ## Models
 
-Use `python3 -m rosetta models` to see models available to the installed OpenCode.
+Use the TUI's `/models` command or `rosetta models` to see models available to the installed OpenCode.
 Choose `--model provider/model` when coding or benchmarking. Rosetta does not download
 weights, train a model, or start a model server implicitly.
 
@@ -40,8 +49,9 @@ endpoint and installed local runtime; selecting a hosted model is not an air gap
 
 ## Bring a corpus
 
-Routine source files are named `NAME.m`, one routine per file. Use `--corpus` with `code`,
-or configure the MCP process through environment variables:
+Routine source files are named `NAME.m`, one routine per file. The project directory is
+the default corpus when Rosetta launches the TUI. Use `--corpus` to select another flat
+routine directory, or configure the MCP process through environment variables:
 
 | Variable | Meaning |
 |---|---|
@@ -105,8 +115,9 @@ the verifier and are never evidence about a live model's ability.
 
 ## Bounded runs and provenance
 
-A single coding prompt has a 300-second timeout by default; use `code --timeout` to set
-a different positive deadline. Timeouts exit 124; a failed environment exits nonzero.
+A single coding prompt has a 300-second timeout by default; use
+`rosetta --prompt "..." --timeout SECONDS` to set a different positive deadline.
+Timeouts exit 124; a failed environment exits nonzero.
 `eval --out` refuses to overwrite any source or case input, including filesystem aliases.
 
 Benchmark model calls have a separate 120-second default deadline, configurable with

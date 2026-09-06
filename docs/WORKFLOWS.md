@@ -1,6 +1,7 @@
 # How someone uses Rosetta
 
-Five workflows. One command each. Every command prints the next one.
+Five workflows, available from one project-aware TUI and from standalone
+commands. Every standalone command prints the next one.
 
 This document is the contract for the *surface*, the way
 [`docs/PROJECT.md`](PROJECT.md) §7 is the contract for the *core*. It does not
@@ -35,13 +36,14 @@ The shape matters more than the commands. There is exactly one arbiter, and
 all five workflows are the same loop viewed from different distances: run both
 versions, diff output *and* database state, believe the diff.
 
-Two entry surfaces, and they are the same underneath:
+The default surface and its supporting entry points are the same underneath:
 
 | | What it is | State |
 |---|---|---|
-| **TUI** | `rosetta`, a single command with five verbs | **live** |
+| **TUI** | bare `rosetta`: branded OpenCode with Rosetta's agent, tools and command palette | **live** |
+| **Standalone CLI** | `rosetta edit`, `verify`, `model`, `bench` and `train` | **live** |
 | **Editor / agent host** | the MCP server, 8 tools, `rosetta mcp serve` | **live** |
-| **GUI** | `rosetta gui`, the same five workflows in a browser | **live** |
+| **Browser view** | `rosetta gui`, the same five workflows in a browser | **live** |
 
 None of these is a separate implementation. `rosetta edit`, the Edit view and
 an agent in OpenCode all consume the same generators in
@@ -56,14 +58,19 @@ else — the GUI computes exactly one number of its own, an elapsed-time clock.
 
 ```bash
 git clone <this repo> && cd Rosetta
-export PATH="$PWD/bin:$PATH"     # gives you `rosetta`
-rosetta                          # the map: what is wired, what is not
-rosetta doctor                   # can this machine run the verifier
+bash scripts/install.sh --bin-dir "$HOME/.local/bin"
+cd /path/to/the/project
+rosetta                          # opens the TUI here
 ```
 
-`rosetta` and `rosetta --help` work offline with no container, no network and
-no credentials. Everything that needs those is loaded only by the command that
-needs it, so the front door never fails for a reason you cannot see.
+`rosetta` opens the current directory and uses it as the default routine
+corpus. `rosetta /another/project` opens another directory. The launcher
+injects Rosetta's config in memory, so it does not leave `.opencode` files in
+the project. Type `/` in the TUI to discover the product workflows.
+
+`rosetta --help` and `rosetta status --plain` work offline with no
+container, network or credentials. Everything that needs those is loaded only
+by the command that needs it.
 
 `rosetta doctor` is the one command to run when something is wrong. It answers
 four questions in order — python, verifier, model access, data — and stops

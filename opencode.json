@@ -32,13 +32,42 @@
   },
   "agent": {
     "rosetta": {
-      "color": "#ff8053"
+      "description": "Work on obscure languages with the selected model and report executable verification evidence.",
+      "mode": "primary",
+      "color": "#ff8053",
+      "temperature": 0.1,
+      "permission": {
+        "bash": {
+          "git push*": "deny",
+          "git commit*": "deny",
+          "gh pr *": "deny",
+          "docker rm*": "deny",
+          "docker stop*": "deny",
+          "*": "allow"
+        },
+        "edit": "allow",
+        "webfetch": "ask"
+      }
     },
     "divergence": {
-      "color": "#c4deaa"
+      "description": "Read a verification report and explain what broke in plain language.",
+      "mode": "subagent",
+      "color": "#c4deaa",
+      "temperature": 0,
+      "permission": {
+        "bash": "deny",
+        "edit": "deny"
+      }
     },
     "explain": {
-      "color": "#a1a49a"
+      "description": "Read-only explanation of an unfamiliar routine grounded in available evidence.",
+      "mode": "subagent",
+      "color": "#a1a49a",
+      "temperature": 0.1,
+      "permission": {
+        "bash": "deny",
+        "edit": "deny"
+      }
     },
     "build": {
       "color": "#a1a49a"

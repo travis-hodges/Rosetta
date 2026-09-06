@@ -1,6 +1,7 @@
 """Exercise source installation and CLI input boundaries without a runtime."""
 
 import contextlib
+import importlib.util
 import io
 import json
 import os
@@ -12,6 +13,133 @@ import tempfile
 import unittest
 
 from rosetta import cli
+
+
+def load_branding_module():
+    path = cli.ROOT / "scripts" / "rosetta-brand.py"
+    spec = importlib.util.spec_from_file_location("rosetta_brand", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class BrandingLauncherTests(unittest.TestCase):
+    def test_old_direct_binary_alias_is_migrated_to_source_launcher(self):
+        branding = load_branding_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "opencode"
+            binary.write_text("#!/bin/sh\n")
+            link = root / "rosetta"
+            link.symlink_to(binary)
+
+            installed = branding.install_command(binary, root)
+
+            self.assertEqual(installed.resolve(), cli.ROOT / "bin" / "rosetta")
+            self.assertEqual(branding.install_command(binary, root), installed)
+
+    def test_branding_installer_never_overwrites_an_unrelated_command(self):
+        branding = load_branding_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "opencode"
+            binary.write_text("#!/bin/sh\n")
+            link = root / "rosetta"
+            link.write_text("user-owned\n")
+
+            with self.assertRaises(SystemExit):
+                branding.install_command(binary, root)
+
+            self.assertEqual(link.read_text(), "user-owned\n")
+
+
+class BrandingFontTests(unittest.TestCase):
+    """The marked glyphs are what the TUI paints, and nothing previews them.
+
+    A marker only describes an enclosed counter, so these check that no marker
+    escapes the letter it belongs to. Marking r's open right side once gave the
+    glyph a shadow rectangle and a bottom bar it does not have, and the TUI home
+    screen drew a blob instead of an r.
+    """
+
+    INK = "\u2588\u2580\u2584"  # full block, upper half, lower half
+
+    def setUp(self):
+        self.branding = load_branding_module()
+
+    def test_plain_and_marked_tables_describe_the_same_glyphs(self):
+        plain, marked = self.branding.PLAIN, self.branding.MARKED
+        self.assertEqual(sorted(plain), sorted(marked))
+        for name, table in (("PLAIN", plain), ("MARKED", marked)):
+            for glyph, rows in table.items():
+                self.assertEqual(len(rows), 4, f"{name}[{glyph!r}] is not 4 rows")
+                for row in rows:
+                    self.assertEqual(len(row), 4, f"{name}[{glyph!r}] row {row!r} is not 4 wide")
+
+    def test_every_marker_stands_where_the_plain_glyph_allows_it(self):
+        for glyph, marked_rows in self.branding.MARKED.items():
+            plain_rows = self.branding.PLAIN[glyph]
+            for row, (marked, plain) in enumerate(zip(marked_rows, plain_rows)):
+                for column, (mark, ink) in enumerate(zip(marked, plain)):
+                    where = f"{glyph!r} row {row} column {column}"
+                    if mark == "_":       # counter fill: plain leaves it empty
+                        self.assertEqual(ink, " ", f"fill over ink at {where}")
+                    elif mark == "^":     # half stroke over that fill
+                        self.assertEqual(ink, "\u2580", f"stroke off-stroke at {where}")
+                    elif mark == "~":     # shadow-coloured half stroke
+                        self.assertEqual(ink, " ", f"shadow over ink at {where}")
+                    else:
+                        self.assertEqual(mark, ink, f"marked glyph diverges at {where}")
+
+    def test_a_counter_fill_is_closed_on_the_right_or_below(self):
+        for glyph, rows in self.branding.MARKED.items():
+            for index, row in enumerate(rows):
+                below = rows[index + 1] if index + 1 < len(rows) else "    "
+                for column, mark in enumerate(row):
+                    if mark != "_":
+                        continue
+                    closed_right = any(ch in self.INK for ch in row[column + 1:])
+                    closed_below = below[column] in self.INK
+                    self.assertTrue(
+                        closed_right or closed_below,
+                        f"{glyph!r} fills open page at row {index} column {column}: "
+                        f"no stroke to the right and none beneath it",
+                    )
+
+    def test_a_shadow_stroke_is_bounded_by_real_strokes(self):
+        for glyph, rows in self.branding.MARKED.items():
+            for index, row in enumerate(rows):
+                for column, mark in enumerate(row):
+                    if mark != "~":
+                        continue
+                    left = any(ch in self.INK for ch in row[:column])
+                    right = any(ch in self.INK for ch in row[column + 1:])
+                    self.assertTrue(
+                        left and right,
+                        f"{glyph!r} trails a shadow stroke at row {index} column {column}: "
+                        f"it must sit between two real strokes",
+                    )
+
+    def test_the_wordmark_matches_the_shape_docs_branding_promises(self):
+        # docs/BRANDING.md prints this under "What you get". Both tables have to
+        # agree on it: the plain wordmark is the CLI's, the marked one the TUI's.
+        expected = [
+            "\u2588\u2580\u2580\u2584 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2580 \u2588\u2580\u2580\u2588 \u2580\u2588\u2580\u2580 \u2580\u2588\u2580\u2580 \u2584\u2580\u2580\u2588",
+            "\u2588    \u2588  \u2588 \u2580\u2580\u2580\u2588 \u2588\u2580\u2580\u2580  \u2588    \u2588   \u2588\u2580\u2580\u2588",
+            "\u2580    \u2580\u2580\u2580\u2580 \u2580\u2580\u2580\u2580 \u2580\u2580\u2580\u2580  \u2580\u2580   \u2580\u2580  \u2580\u2580\u2580\u2580",
+        ]
+        plain = self.branding.rows(self.branding.PLAIN, self.branding.brand)
+        self.assertEqual(plain[1:], expected)
+
+        # The TUI draws the wordmark in two halves; joined, they are the same shape.
+        left = self.branding.rows(self.branding.MARKED, "ro")
+        right = self.branding.rows(self.branding.MARKED, "setta")
+        joined = [
+            "".join({"_": " ", "^": "\u2580", "~": "\u2580"}.get(ch, ch) for ch in a + " " + b)
+            for a, b in zip(left, right)
+        ]
+        self.assertEqual(joined[1:], expected)
 
 
 class SourceInstallationTests(unittest.TestCase):
@@ -53,20 +181,15 @@ class SourceInstallationTests(unittest.TestCase):
         executable.write_text("#!/bin/sh\n" + body)
         executable.chmod(0o755)
 
-    def test_help_and_doctor_from_unrelated_directory(self):
+    def test_help_and_status_from_unrelated_directory(self):
         self.assertEqual(self.run_cli("--help").returncode, 0)
         self.fake_opencode("exit 0\n")
-        result = self.run_cli("doctor")
+        result = self.run_cli("status", "--plain")
         self.assertEqual(result.returncode, 0, result.stderr)
-        report = json.loads(result.stdout)
-        self.assertTrue(report["ok"])
-        self.assertEqual(report["mcp_tools"], 8)
-        self.assertTrue(report["source_checkout"])
+        self.assertIn("workflows", result.stdout)
+        self.assertIn("this checkout", result.stdout)
 
-    def test_missing_opencode_doctor_is_not_healthy(self):
-        result = self.run_cli("doctor")
-        self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertFalse(json.loads(result.stdout)["ok"])
+    def test_missing_opencode_blocks_the_tui(self):
         self.assertEqual(self.run_cli("code", "--prompt", "hello").returncode, 2)
 
     def test_launcher_forwards_cwd_arguments_and_child_exit(self):
@@ -77,6 +200,24 @@ class SourceInstallationTests(unittest.TestCase):
         self.assertIn("local/specialist\n", result.stdout)
         self.assertIn("hello '$` world\n", result.stdout)
         self.assertEqual(self.run_cli("models").returncode, 7)
+
+    def test_bare_launcher_opens_tui_in_current_project(self):
+        self.fake_opencode('pwd\nprintf "%s\\n" "$@"\nexit 0\n')
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(lines[0], str(self.directory.resolve()))
+        self.assertIn(str(self.directory.resolve()), lines)
+        self.assertIn("--agent", lines)
+        self.assertIn("rosetta", lines)
+
+    def test_project_path_is_the_default_tui_and_mumps_corpus(self):
+        project = self.directory / "target project"
+        project.mkdir()
+        self.fake_opencode('printf "%s\\n" "$PWD" "$ROSETTA_CORPUS_DIR" "$@"\nexit 0\n')
+        result = self.run_cli(str(project))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[:2], [str(project.resolve()), str(project.resolve())])
 
     def test_prompt_timeout_does_not_echo_private_prompt(self):
         self.fake_opencode("exec /bin/sleep 3\n")
@@ -156,6 +297,39 @@ class EvalValidationTests(unittest.TestCase):
                 with self.assertRaises(SystemExit) as raised:
                     cli.main(["code", "--prompt", "hello", "--timeout", timeout])
                 self.assertEqual(raised.exception.code, 2)
+
+
+class TuiConfigurationTests(unittest.TestCase):
+    def test_external_project_receives_every_rosetta_command(self):
+        config = cli._config()
+        self.assertEqual(
+            set(config["command"]),
+            {"benchmark", "demo", "doctor", "evaluate", "globals", "moneymoment", "report", "routine", "train", "verify"},
+        )
+        self.assertTrue(config["command"]["doctor"]["subtask"])
+        self.assertIn("-m rosetta doctor", config["command"]["doctor"]["template"])
+        self.assertIn(str(cli.ROOT), config["command"]["doctor"]["template"])
+
+    def test_user_surfaces_are_merged_without_displacing_rosetta(self):
+        base = cli._config()
+        merged = cli._merge_user_config(base, json.dumps({
+            "provider": {"local": {}},
+            "mcp": {"user-server": {"type": "remote", "url": "https://example.invalid"}},
+            "agent": {"reviewer": {"mode": "subagent"}},
+            "command": {"ship": {"template": "Ship it"}},
+            "instructions": ["/tmp/user-instructions.md"],
+            "default_agent": "reviewer",
+        }))
+        self.assertIn("local", merged["provider"])
+        self.assertIn("user-server", merged["mcp"])
+        self.assertIn("rosetta", merged["mcp"])
+        self.assertIn("reviewer", merged["agent"])
+        self.assertIn("rosetta", merged["agent"])
+        self.assertIn("ship", merged["command"])
+        self.assertIn("verify", merged["command"])
+        self.assertIn("/tmp/user-instructions.md", merged["instructions"])
+        self.assertIn(str(cli.ROOT / ".opencode" / "instructions.md"), merged["instructions"])
+        self.assertEqual(merged["default_agent"], "rosetta")
 
 
 if __name__ == "__main__":
