@@ -22,12 +22,14 @@ function wireCopyButtons(scope) {
 
 wireCopyButtons(document);
 
-// The install commands must name the host actually serving this page. Hard-coding a
-// domain here is how a download page ends up telling people to curl a host that
-// does not resolve.
+// Include the directory actually serving this page. GitHub Pages project sites
+// live below /<repository>/, while Vercel serves this same build from /.
+const siteBase = location.protocol === 'file:'
+  ? 'https://rosetta-legacy.vercel.app'
+  : new URL('./', location.href).href.replace(/\/$/, '');
+
 document.querySelectorAll('[data-origin-command]').forEach(node => {
-  const origin = location.protocol === 'file:' ? 'https://rosetta-legacy.vercel.app' : location.origin;
-  const command = node.dataset.originCommand.replace('{origin}', origin);
+  const command = node.dataset.originCommand.replace('{origin}', siteBase);
   node.textContent = command;
   const button = node.closest('.command-row')?.querySelector('[data-copy]');
   if (button) button.dataset.copy = command;
@@ -66,7 +68,7 @@ function pending(reason) {
 }
 
 function render(release) {
-  const command = `curl -fsSL ${location.origin}/install.sh | sh`;
+  const command = `curl -fsSL ${siteBase}/install.sh | sh`;
   panel.innerHTML = `
     <div class="release-head">
       <div>
@@ -96,7 +98,7 @@ function render(release) {
   wireCopyButtons(panel);
 }
 
-fetch('/releases.json', { cache: 'no-cache' })
+fetch(`${siteBase}/releases.json`, { cache: 'no-cache' })
   .then(response => response.ok ? response.json() : Promise.reject(new Error(String(response.status))))
   .then(manifest => {
     if (!manifest.latest) {
