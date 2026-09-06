@@ -192,3 +192,5 @@ export const RosettaExperience = async ({ client }) => {
     },
   }
 }
+
+export default RosettaExperience
