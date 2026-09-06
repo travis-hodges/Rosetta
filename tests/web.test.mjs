@@ -6,52 +6,87 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 
 const site = new URL('../', import.meta.url);
-const html = await readFile(new URL('index.html', site), 'utf8');
-const script = await readFile(new URL('src/main.js', site), 'utf8');
-const css = await readFile(new URL('src/styles.css', site), 'utf8');
+const read = path => readFile(new URL(path, site), 'utf8');
 
-test('the page module parses without a bundler', () => {
-  assert.doesNotThrow(() => new Script(script, { filename: 'src/main.js' }));
-  assert.doesNotMatch(script, /^\s*import\s+['"]/m, 'bundler-only imports will 404 in the browser');
-});
+// One entry per published page. Each page loads exactly one module: main.js drives
+// the landing page's canvas artwork and scroll story and would throw on a page that
+// has none of it, so /download has its own.
+const PAGES = [
+  { file: 'index.html', module: 'src/main.js' },
+  { file: 'download.html', module: 'src/download.js' },
+];
+for (const page of PAGES) {
+  page.html = await read(page.file);
+  page.script = await read(page.module);
+}
+const html = PAGES[0].html;            // the landing page, where most rules apply
+const script = PAGES[0].script;
+const css = await read('src/styles.css');
 
-test('every local asset the page references exists', async () => {
-  const references = [...html.matchAll(/(?:href|src)="(\/[^"]+)"/g)].map(match => match[1]);
-  assert.ok(references.includes('/src/main.js'));
-  assert.ok(references.includes('/src/styles.css'));
-  for (const reference of references) {
-    await readFile(new URL(reference.slice(1), site));
+test('every page module parses without a bundler', () => {
+  for (const { module, script: source } of PAGES) {
+    assert.doesNotThrow(() => new Script(source, { filename: module }));
+    assert.doesNotMatch(source, /^\s*import\s+['"]/m, `${module}: bundler-only imports will 404 in the browser`);
   }
 });
 
-test('the only external origin is the declared font CDN', () => {
-  const origins = new Set([...`${html}${css}`.matchAll(/https?:\/\/([^/'")\s]+)/g)].map(match => match[1]));
-  for (const origin of origins) {
-    assert.ok(
-      ['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'www.w3.org', 'openapi.vercel.sh'].includes(origin),
-      `Unexpected external origin ${origin}`,
-    );
+test('every local asset every page references exists', async () => {
+  for (const { file, html: markup, module } of PAGES) {
+    const references = [...markup.matchAll(/(?:href|src)="(\/[^"#?]+)"/g)].map(match => match[1]);
+    assert.ok(references.includes(`/${module}`), `${file} must load /${module}`);
+    assert.ok(references.includes('/src/styles.css'), `${file} must load the stylesheet`);
+    for (const reference of references) {
+      // Clean URLs: /download is a page route, not a file on disk.
+      if (PAGES.some(page => page.file === `${reference.slice(1)}.html`)) continue;
+      // build.mjs flattens public/ onto the site root, so /favicon.svg is public/favicon.svg.
+      // Resolve the same two ways it does, or the build passes while this fails.
+      await readFile(new URL(reference.slice(1), site))
+        .catch(() => readFile(new URL(`public/${reference.slice(1)}`, site)))
+        .catch(() => { throw new Error(`${file} references ${reference}, which does not exist`); });
+    }
   }
-  assert.doesNotMatch(html, /analytics|gtag|googletagmanager/i);
+});
+
+const ALLOWED_ORIGINS = [
+  'fonts.googleapis.com', 'fonts.gstatic.com',   // typography
+  'github.com',                                  // the repository
+  'www.gao.gov', 'department.va.gov',            // cited sources
+  'www.w3.org', 'openapi.vercel.sh',             // schema namespaces
+];
+
+test('every external origin the page reaches is declared', () => {
+  const everything = PAGES.map(page => page.html).join('') + css;
+  const origins = new Set([...everything.matchAll(/https?:\/\/([^/'")\s]+)/g)].map(match => match[1]));
+  // Report every offender at once. Asserting inside the loop stops at the first,
+  // which turns one review into one round trip per link.
+  const undeclared = [...origins].filter(origin => !ALLOWED_ORIGINS.includes(origin));
+  assert.deepEqual(undeclared, [], `Undeclared external origins: ${undeclared.join(', ')}`);
+  assert.doesNotMatch(everything, /analytics|gtag|googletagmanager/i);
 });
 
 test('DOM identifiers are unique and accessibility relationships resolve', () => {
-  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
-  assert.equal(new Set(ids).size, ids.length, 'IDs must be unique');
-  for (const match of html.matchAll(/(?:aria-controls|aria-labelledby|for)="([^"]+)"/g)) {
-    for (const id of match[1].split(' ')) assert.ok(ids.includes(id), `Missing target ${id}`);
+  for (const { file, html: markup } of PAGES) {
+    const ids = [...markup.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+    assert.equal(new Set(ids).size, ids.length, `${file}: IDs must be unique`);
+    for (const match of markup.matchAll(/(?:aria-controls|aria-labelledby|for)="([^"]+)"/g)) {
+      for (const id of match[1].split(' ')) assert.ok(ids.includes(id), `${file}: missing target ${id}`);
+    }
   }
 });
 
 test('in-page navigation targets real sections', () => {
-  for (const match of html.matchAll(/href="#([^"]+)"/g)) {
-    assert.ok(html.includes(`id="${match[1]}"`), `Dead anchor #${match[1]}`);
+  for (const { file, html: markup } of PAGES) {
+    for (const match of markup.matchAll(/href="#([^"]+)"/g)) {
+      assert.ok(markup.includes(`id="${match[1]}"`), `${file}: dead anchor #${match[1]}`);
+    }
   }
 });
 
-test('every element the script drives is present in the markup', () => {
-  for (const match of script.matchAll(/querySelector\('#([\w-]+)'\)/g)) {
-    assert.ok(html.includes(`id="${match[1]}"`), `Script targets missing #${match[1]}`);
+test('every element each page script drives is present in that page', () => {
+  for (const { file, html: markup, module, script: source } of PAGES) {
+    for (const match of source.matchAll(/querySelector\('#([\w-]+)'\)/g)) {
+      assert.ok(markup.includes(`id="${match[1]}"`), `${module} targets #${match[1]}, absent from ${file}`);
+    }
   }
 });
 
@@ -66,9 +101,59 @@ test('external links cannot reach back into the opener', () => {
   }
 });
 
-test('the page never claims benchmark numbers it has not measured', () => {
-  assert.doesNotMatch(html, /\b\d{1,3}(\.\d+)?\s*%/, 'no hand-authored performance percentages');
-  assert.match(html, /synthetic|illustrative/i, 'the walkthrough must be labelled as illustrative');
+// Visible text only: no <style>/<script> bodies and no attribute values. A guard that
+// fires on `max-width:100%` teaches people to ignore it, so it has to read what a
+// visitor reads.
+const textContent = markup => markup
+  .replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+  .replace(/<[^>]+>/g, ' ');
+
+test('no page claims numbers it has not measured', () => {
+  for (const { file, html: markup } of PAGES) {
+    const text = textContent(markup);
+    assert.doesNotMatch(text, /\b\d{1,3}(\.\d+)?\s*%/, `${file}: no hand-authored performance percentages`);
+    assert.doesNotMatch(text, /\b[0-9a-f]{64}\b/i, `${file}: checksums come from releases.json, never hand-authored`);
+  }
+  assert.match(textContent(html), /synthetic|illustrative/i, 'the walkthrough must be labelled as illustrative');
+});
+
+test('the installer and release manifest are publishable artifacts', async () => {
+  const installer = await read('public/install.sh');
+  // Served to `curl | sh`, so a syntax error is a broken install for everyone.
+  const check = spawn('sh', ['-n', 'public/install.sh'], { cwd: site, stdio: 'pipe' });
+  const [code] = await once(check, 'exit');
+  assert.equal(code, 0, 'public/install.sh must be valid POSIX sh');
+
+  // The pinned release is substituted at publish time. If the sentinel is gone, a
+  // real version must have replaced it -- never a hand-typed guess.
+  const pinned = installer.match(/^PINNED_VERSION="([^"]*)"/m);
+  assert.ok(pinned, 'install.sh must declare PINNED_VERSION');
+  assert.ok(
+    pinned[1].startsWith('__ROSETTA') || /^\d+\.\d+\.\d+$/.test(pinned[1]),
+    `PINNED_VERSION is neither the sentinel nor a version: ${pinned[1]}`,
+  );
+
+  // A download page that names a host is a download page that breaks when the host
+  // changes. Both the page and the installer derive it instead.
+  for (const { file, html: markup } of PAGES) {
+    assert.doesNotMatch(markup, /https?:\/\/rosetta\.[a-z]+/i, `${file} hard-codes a domain`);
+  }
+
+  // Strip comments first: the installer documents that it never uses sudo, and that
+  // sentence must not be what trips the guard.
+  const body = installer.replace(/^\s*#.*$/gm, '');
+  assert.doesNotMatch(body, /\bsudo\b/, 'the installer must never invoke sudo');
+  assert.doesNotMatch(body, /(^|\s)(rm\s+-rf?\s+["']?\$HOME["']?\s*$|rm\s+-rf?\s+\/\s)/m,
+    'the installer must never remove a bare $HOME or /');
+
+  const manifest = JSON.parse(await read('public/releases.json'));
+  assert.ok('latest' in manifest, 'releases.json must have a latest key');
+  if (manifest.latest) {
+    for (const field of ['version', 'tag', 'tarball', 'tarball_url', 'sha256']) {
+      assert.ok(manifest.latest[field], `releases.json latest is missing ${field}`);
+    }
+    assert.match(manifest.latest.sha256, /^[0-9a-f]{64}$/, 'sha256 must be a full digest');
+  }
 });
 
 test('the build produces a servable site and unknown paths 404', async t => {
@@ -102,6 +187,21 @@ test('the build produces a servable site and unknown paths 404', async t => {
     assert.equal(asset.status, 200, `${path} must be served`);
     assert.match(asset.headers.get('content-type'), new RegExp(type));
   }
+
+  // The download route, the installer and the manifest are the install path. If any
+  // of them stops being served, the front page's one command breaks.
+  const page = await fetch(base + '/download');
+  assert.equal(page.status, 200, '/download must resolve via cleanUrls');
+  assert.match(await page.text(), /id="release-panel"/);
+
+  const installer = await fetch(base + '/install.sh');
+  assert.equal(installer.status, 200, '/install.sh must be served');
+  assert.match(installer.headers.get('content-type'), /text\/plain/);
+  assert.match(await installer.text(), /^#!\/bin\/sh/);
+
+  const manifest = await fetch(base + '/releases.json');
+  assert.equal(manifest.status, 200, '/releases.json must be served');
+  assert.ok('latest' in await manifest.json());
 
   assert.equal((await fetch(base + '/private.txt')).status, 404);
   assert.equal((await fetch(base + '/../AGENTS.md')).status, 404);

@@ -1,0 +1,50 @@
+Rosetta
+Copyright 2026 Travis Hodges
+
+This product includes software developed as part of the Rosetta project,
+licensed under the Apache License, Version 2.0 (see LICENSE).
+
+--------------------------------------------------------------------------------
+Redistributed third-party material — NOT covered by the license above
+--------------------------------------------------------------------------------
+
+This distribution bundles source code and derived data from the U.S. Department
+of Veterans Affairs VistA system. That material is U.S. Government work obtained
+through the VA's FOIA release of VistA and is not subject to copyright in the
+United States. It is redistributed here unmodified in substance, for the purpose
+of verification research. The Apache License above covers Rosetta's own code; it
+does not, and cannot, relicense the material below.
+
+  data/routines/*.m
+      Verbatim VistA MUMPS routines. Each file retains its original VA header
+      line, including package name, version and patch level -- for example:
+          GMRVPCE0 ;HIOFO/RM,FT-Data Event Driver for Vitals ;3/7/05  10:34
+           ;;5.0;GEN. MED. REC. - VITALS;**8**;Oct 31, 2002
+
+  data/fileman/dd.json.gz
+      A machine-readable extract of the VistA FileMan data dictionary, derived
+      from the same release.
+
+  data/tasks/*.json
+      Task, candidate and split metadata computed over the routines above.
+      Derived from U.S. Government work; the derivation is Rosetta's.
+
+  rosetta/core/m/*.m
+      Rosetta's own MUMPS worker routines. These are original work under the
+      Apache License, not VA material, despite sharing the .m extension.
+
+Source of the VA material:
+  https://department.va.gov/foia/foia-version-of-vista/
+
+VistA is a system of the U.S. Department of Veterans Affairs. This project is
+independent and unaffiliated; no endorsement by the VA or any other government
+agency is implied.
+
+--------------------------------------------------------------------------------
+Runtime dependencies obtained separately — not bundled
+--------------------------------------------------------------------------------
+
+Rosetta executes MUMPS through YottaDB inside a container image published by
+WorldVistA (worldvista/vehu). Neither YottaDB nor that image is redistributed
+here; scripts/bootstrap.sh pulls the image from its publisher at install time,
+under that publisher's own license terms.
