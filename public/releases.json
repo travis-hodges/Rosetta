@@ -1,16 +1,26 @@
 {
   "repository": "https://github.com/travis-hodges/Rosetta",
   "latest": {
-    "version": "0.1.1",
-    "tag": "v0.1.1",
-    "published": "2026-09-06",
-    "tarball": "rosetta-0.1.1.tar.gz",
-    "tarball_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.1.1/rosetta-0.1.1.tar.gz",
-    "checksums_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.1.1/SHA256SUMS",
-    "sha256": "ace3857a377b40b2b9c02a565fcf6d65b432760b844bd02a8022edc1add25e5d",
-    "size": "2.0M"
+    "version": "0.2.0",
+    "tag": "v0.2.0",
+    "published": "2026-09-13",
+    "tarball": "rosetta-0.2.0.tar.gz",
+    "tarball_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.2.0/rosetta-0.2.0.tar.gz",
+    "checksums_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.2.0/SHA256SUMS",
+    "sha256": "81118b86358a4e5038e588171d65f290f315a2b905b5924540ec8ee4f6d5c464",
+    "size": "2.2M"
   },
   "releases": [
+    {
+      "version": "0.2.0",
+      "tag": "v0.2.0",
+      "published": "2026-09-13",
+      "tarball": "rosetta-0.2.0.tar.gz",
+      "tarball_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.2.0/rosetta-0.2.0.tar.gz",
+      "checksums_url": "https://github.com/travis-hodges/Rosetta/releases/download/v0.2.0/SHA256SUMS",
+      "sha256": "81118b86358a4e5038e588171d65f290f315a2b905b5924540ec8ee4f6d5c464",
+      "size": "2.2M"
+    },
     {
       "version": "0.1.1",
       "tag": "v0.1.1",
