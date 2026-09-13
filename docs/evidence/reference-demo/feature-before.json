@@ -1,0 +1,119 @@
+{
+  "runtime": "YottaDB",
+  "isolation": "clean_state with per-case transaction rollback",
+  "sources": {
+    "PAYMENT": "e8a75a26aee7bf486ad6f26392a211a4c546d0809275b5c9a63cdfc344ec118e",
+    "PAYREPORT": "df3de777bf009dded6970bdd1546363324965997762a61840e953e8d29ba2fbb",
+    "PAYSTORE": "0ddd3811a3ae0aac82f1a2aa99ae8858c2c60303342ea3c8d2677c8b2dad4889"
+  },
+  "cases_sha256": "110c7d71e63a2d71ea48f44cf72e5cfc091439e2b11a729c5affe40d56799b5e",
+  "passed": 0,
+  "total": 4,
+  "cases": [
+    {
+      "name": "retry-original-receipt",
+      "passed": false,
+      "failures": [
+        {
+          "stdout": {
+            "expected": "OK^125",
+            "actual": "OK^475"
+          }
+        },
+        {
+          "globals": {
+            "expected": {
+              "^RPAY(\"balance\",\"A\")": "350",
+              "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+              "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+            },
+            "actual": {
+              "^RPAY(\"balance\",\"A\")": "475",
+              "^RPAY(\"receipt\",\"p1\")": "A^125^475",
+              "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "conflicting-amount",
+      "passed": false,
+      "failures": [
+        {
+          "stdout": {
+            "expected": "ERROR:DUPLICATE",
+            "actual": "OK^476"
+          }
+        },
+        {
+          "globals": {
+            "expected": {
+              "^RPAY(\"balance\",\"A\")": "350",
+              "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+              "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+            },
+            "actual": {
+              "^RPAY(\"balance\",\"A\")": "476",
+              "^RPAY(\"receipt\",\"p1\")": "A^126^476",
+              "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "conflicting-account",
+      "passed": false,
+      "failures": [
+        {
+          "stdout": {
+            "expected": "ERROR:DUPLICATE",
+            "actual": "OK^125"
+          }
+        },
+        {
+          "globals": {
+            "expected": {
+              "^RPAY(\"balance\",\"A\")": "350",
+              "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+              "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+            },
+            "actual": {
+              "^RPAY(\"balance\",\"A\")": "350",
+              "^RPAY(\"balance\",\"B\")": "125",
+              "^RPAY(\"receipt\",\"p1\")": "B^125^125",
+              "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "numeric-spelling-retry",
+      "passed": false,
+      "failures": [
+        {
+          "stdout": {
+            "expected": "OK^125",
+            "actual": "OK^475"
+          }
+        },
+        {
+          "globals": {
+            "expected": {
+              "^RPAY(\"balance\",\"A\")": "350",
+              "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+              "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+            },
+            "actual": {
+              "^RPAY(\"balance\",\"A\")": "475",
+              "^RPAY(\"receipt\",\"p1\")": "A^0125^475",
+              "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+The files in vendor/ are documentation from https://docs.yottadb.com/ .
+Copyright 2017-2026 YottaDB LLC. Portions Copyright Fidelity National Information Services, Inc.
+Permission is granted to copy, distribute and/or modify this documentation under the
+terms of the GNU Free Documentation License, Version 1.3 or any later version published
+by the Free Software Foundation; with no Invariant Sections, no Front-Cover Texts and
+no Back-Cover Texts. See GNU-FDL-1.3.txt.
+License source: https://docs.yottadb.com/shared/LICENSE.html
+History: converted from the vendor's HTML to Markdown by Rosetta contributors, 2026-09-13.

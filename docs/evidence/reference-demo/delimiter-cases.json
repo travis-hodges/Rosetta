@@ -1,0 +1,26 @@
+[
+  {
+    "name": "receipt-parsing-independent-of-caller-locals",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "125"
+    ],
+    "globals_in": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    },
+    "stdout": "OK^125",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    },
+    "locals_in": {
+      "U": "|"
+    }
+  }
+]

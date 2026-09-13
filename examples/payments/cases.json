@@ -1,0 +1,148 @@
+[
+  {
+    "name": "post-first-payment",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "125"
+    ],
+    "globals_in": {},
+    "stdout": "OK^125",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "125",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125"
+    }
+  },
+  {
+    "name": "post-another-payment",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p2",
+      "A",
+      "75"
+    ],
+    "globals_in": {
+      "^RPAY(\"balance\",\"A\")": "125",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125"
+    },
+    "stdout": "OK^200",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "200",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^75^200"
+    }
+  },
+  {
+    "name": "missing-id",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "",
+      "A",
+      "100"
+    ],
+    "globals_in": {},
+    "stdout": "ERROR:ID",
+    "globals_out": {}
+  },
+  {
+    "name": "missing-account",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "",
+      "100"
+    ],
+    "globals_in": {},
+    "stdout": "ERROR:ACCOUNT",
+    "globals_out": {}
+  },
+  {
+    "name": "zero",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "0"
+    ],
+    "globals_in": {},
+    "stdout": "ERROR:AMOUNT",
+    "globals_out": {}
+  },
+  {
+    "name": "negative",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "-1"
+    ],
+    "globals_in": {},
+    "stdout": "ERROR:AMOUNT",
+    "globals_out": {}
+  },
+  {
+    "name": "decimal",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "1.2"
+    ],
+    "globals_in": {},
+    "stdout": "ERROR:AMOUNT",
+    "globals_out": {}
+  },
+  {
+    "name": "nonnumeric",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "hello"
+    ],
+    "globals_in": {},
+    "stdout": "ERROR:AMOUNT",
+    "globals_out": {}
+  },
+  {
+    "name": "report-account",
+    "routine": "PAYREPORT",
+    "entry": "$$ACCOUNT",
+    "args": [
+      "A"
+    ],
+    "globals_in": {
+      "^RPAY(\"balance\",\"A\")": "200",
+      "^RPAY(\"balance\",\"B\")": "50"
+    },
+    "stdout": "A^200",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "200",
+      "^RPAY(\"balance\",\"B\")": "50"
+    }
+  },
+  {
+    "name": "report-total",
+    "routine": "PAYREPORT",
+    "entry": "$$TOTAL",
+    "args": [],
+    "globals_in": {
+      "^RPAY(\"balance\",\"A\")": "200",
+      "^RPAY(\"balance\",\"B\")": "50"
+    },
+    "stdout": "250",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "200",
+      "^RPAY(\"balance\",\"B\")": "50"
+    }
+  }
+]

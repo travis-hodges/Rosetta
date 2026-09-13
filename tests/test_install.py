@@ -179,6 +179,7 @@ class SourceInstallationTests(unittest.TestCase):
         shutil.copytree(cli.REPO_ROOT / ".opencode" / "themes", self.checkout / ".opencode" / "themes")
         shutil.copy(cli.REPO_ROOT / ".opencode" / "instructions.md", self.checkout / ".opencode")
         shutil.copy(cli.REPO_ROOT / ".opencode" / "tui.json", self.checkout / ".opencode")
+        shutil.copytree(cli.REPO_ROOT / ".opencode" / "generic", self.checkout / ".opencode" / "generic")
         shutil.copy(cli.REPO_ROOT / "opencode.json", self.checkout)
         (self.checkout / "data").symlink_to(cli.REPO_ROOT / "data", target_is_directory=True)
         (self.checkout / "scripts").mkdir()
@@ -252,7 +253,7 @@ class SourceInstallationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             result.stdout.strip(),
-            str((self.checkout / ".opencode" / "tui.json").resolve()),
+            str((self.checkout / ".opencode" / "generic" / "tui.json").resolve()),
         )
 
     def test_tui_receives_the_rosetta_theme_directory(self):
@@ -261,7 +262,7 @@ class SourceInstallationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             result.stdout.strip(),
-            str((self.checkout / ".opencode").resolve()),
+            str((self.checkout / ".opencode" / "generic").resolve()),
         )
 
     def test_an_explicit_tui_preset_override_is_preserved(self):
@@ -368,42 +369,16 @@ class TuiConfigurationTests(unittest.TestCase):
         self.assertEqual(theme["defs"]["acid"], "#DDF95C")
         self.assertEqual(theme["theme"]["diffRemoved"]["dark"], "alarm")
 
-    def test_external_project_receives_every_rosetta_command(self):
+    def test_external_project_receives_generic_tools_and_normal_agent(self):
         config = cli._config()
-        self.assertEqual(
-            set(config["command"]),
-            {
-                "benchmark", "change", "database", "demo", "doctor", "evaluate", "globals",
-                "moneymoment", "pipeline", "report", "routine", "start",
-                "train", "verify",
-            },
-        )
-        self.assertTrue(config["command"]["doctor"]["subtask"])
-        self.assertIn("rosetta fileman", config["command"]["change"]["template"])
-        self.assertIn("execute the requested FileMan change", config["command"]["change"]["template"])
-        self.assertIn("-m rosetta doctor", config["command"]["doctor"]["template"])
-        self.assertIn(str(cli.ROOT), config["command"]["doctor"]["template"])
+        self.assertEqual(config["command"], {})
+        self.assertEqual(set(config["mcp"]), {"references"})
         self.assertEqual(config["default_agent"], "rosetta-agent")
-        self.assertEqual(len(config["plugin"]), 1)
         self.assertTrue(config["plugin"][0].endswith("/.opencode/plugins/rosetta-experience.js"))
         self.assertEqual(config["model"], "opencode/big-pickle")
-        self.assertEqual(
-            config["provider"]["opencode"]["models"]["big-pickle"]["name"],
-            "Translator 1.0",
-        )
-        primary = {
-            name
-            for name, profile in config["agent"].items()
-            if profile.get("mode") == "primary" and not profile.get("disable")
-        }
-        self.assertEqual(
-            primary,
-            {"rosetta-agent", "rosetta-plan", "rosetta-verify"},
-        )
-        self.assertTrue(config["agent"]["build"]["disable"])
-        self.assertTrue(config["agent"]["plan"]["disable"])
-        for command in config["command"].values():
-            self.assertIn(command["agent"], config["agent"])
+        self.assertNotIn("MUMPS", config["agent"]["rosetta-agent"]["prompt"])
+        self.assertNotIn("build", config["agent"])
+        self.assertNotIn("plan", config["agent"])
 
     def test_user_surfaces_are_merged_without_displacing_rosetta(self):
         base = cli._config()
@@ -418,11 +393,11 @@ class TuiConfigurationTests(unittest.TestCase):
         }))
         self.assertIn("local", merged["provider"])
         self.assertIn("user-server", merged["mcp"])
-        self.assertIn("rosetta", merged["mcp"])
+        self.assertIn("references", merged["mcp"])
         self.assertIn("reviewer", merged["agent"])
         self.assertIn("rosetta-agent", merged["agent"])
         self.assertIn("ship", merged["command"])
-        self.assertIn("verify", merged["command"])
+        self.assertEqual(merged["command"]["ship"]["template"], "Ship it")
         self.assertIn("/tmp/user-instructions.md", merged["instructions"])
         self.assertIn(str(cli.ROOT / ".opencode" / "instructions.md"), merged["instructions"])
         self.assertEqual(merged["plugin"][0], "example-plugin")
@@ -435,7 +410,7 @@ class TuiConfigurationTests(unittest.TestCase):
                 "opencode": {
                     "options": {"timeout": 90000},
                     "models": {
-                        "big-pickle": {"options": {"temperature": 0.2}},
+                        "big-pickle": {"name": "My model", "options": {"temperature": 0.2}},
                         "another": {"name": "Another"},
                     },
                 }
@@ -444,7 +419,7 @@ class TuiConfigurationTests(unittest.TestCase):
         provider = merged["provider"]["opencode"]
         self.assertEqual(provider["options"]["timeout"], 90000)
         self.assertIn("another", provider["models"])
-        self.assertEqual(provider["models"]["big-pickle"]["name"], "Translator 1.0")
+        self.assertEqual(provider["models"]["big-pickle"]["name"], "My model")
         self.assertEqual(
             provider["models"]["big-pickle"]["options"]["temperature"],
             0.2,

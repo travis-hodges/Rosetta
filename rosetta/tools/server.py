@@ -400,8 +400,7 @@ class RosettaServer:
         src = stdin if stdin is not None else sys.stdin
         dst = stdout if stdout is not None else sys.stdout
         self._warn(
-            f"ready: {len(self.registry.list())} tools, backend="
-            f"{backend_status()['backend']}"
+            f"ready: {len(self.registry.list())} tools"
         )
         while True:
             try:

@@ -1,0 +1,64 @@
+{
+  "runtime": "YottaDB",
+  "isolation": "clean_state with per-case transaction rollback",
+  "sources": {
+    "PAYMENT": "e8a75a26aee7bf486ad6f26392a211a4c546d0809275b5c9a63cdfc344ec118e",
+    "PAYREPORT": "df3de777bf009dded6970bdd1546363324965997762a61840e953e8d29ba2fbb",
+    "PAYSTORE": "0ddd3811a3ae0aac82f1a2aa99ae8858c2c60303342ea3c8d2677c8b2dad4889"
+  },
+  "cases_sha256": "7533f557b6123d28d95bd8d0ba73a5845749d7453cd780b1b41861dc0c629914",
+  "passed": 10,
+  "total": 10,
+  "cases": [
+    {
+      "name": "post-first-payment",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "post-another-payment",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "missing-id",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "missing-account",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "zero",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "negative",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "decimal",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "nonnumeric",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "report-account",
+      "passed": true,
+      "failures": []
+    },
+    {
+      "name": "report-total",
+      "passed": true,
+      "failures": []
+    }
+  ]
+}

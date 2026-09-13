@@ -69,7 +69,7 @@ class TerminalTests(unittest.TestCase):
                 self.assertEqual(run.call_args.kwargs["env"]["PWD"], str(Path(directory).resolve()))
                 self.assertEqual(run.call_args.kwargs["env"]["ROSETTA_CORPUS_DIR"], str(Path(directory).resolve()))
                 config = json.loads(run.call_args.kwargs["env"]["OPENCODE_CONFIG_CONTENT"])
-                self.assertEqual(config["mcp"]["rosetta"]["environment"]["PYTHONPATH"], str(cli.ROOT))
+                self.assertEqual(config["mcp"]["references"]["environment"]["PYTHONPATH"], str(cli.ROOT))
 
     def test_bare_launch_uses_project_as_workspace_and_default_corpus(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -84,10 +84,10 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(environment["ROSETTA_PROJECT_DIR"], str(Path(directory).resolve()))
             self.assertEqual(environment["ROSETTA_CORPUS_DIR"], str(Path(directory).resolve()))
             self.assertEqual(
-                config["mcp"]["rosetta"]["environment"]["ROSETTA_CORPUS_DIR"],
+                config["mcp"]["references"]["environment"]["ROSETTA_CORPUS_DIR"],
                 str(Path(directory).resolve()),
             )
-            self.assertIn("verify", config["command"])
+            self.assertEqual(config["command"], {})
 
     def test_benchmark_environment_disables_inherited_tools(self):
         agent = RosettaAgent(isolated=True, tools_on=True)

@@ -38,38 +38,21 @@ test('execution tools receive an animated proof phase', () => {
   assert.equal(phase('read_routine'), null);
 });
 
-test('the proof pulse moves while a tool runs and stops on its verdict', async () => {
+test('reference toasts describe only actual tool calls', async () => {
   const toasts = [];
   const hooks = await RosettaExperience({
-    client: {
-      tui: {
-        async showToast({ body }) {
-          toasts.push(body);
-        },
-      },
-    },
+    client: { tui: { async showToast({ body }) { toasts.push(body); } } },
   });
-
-  await hooks['tool.execute.before']({
-    tool: 'verify_change',
-    sessionID: 'session',
-    callID: 'proof-call',
-  });
-  await wait(930);
-
-  assert.ok(toasts.length >= 2, 'the running indicator never advanced');
-  assert.notEqual(toasts[0].title, toasts[1].title);
-  assert.match(toasts[0].title, /Rosetta · PROVE/);
-
-  await hooks['tool.execute.after'](
-    { tool: 'verify_change', sessionID: 'session', callID: 'proof-call', args: {} },
-    { title: 'Verification', output: 'NOT EQUIVALENT', metadata: {} },
+  await hooks['tool.execute.before'](
+    { tool: 'references_reference_search', callID: 'lookup' },
+    { args: { query: 'error trapping' } },
   );
-  const stoppedAt = toasts.length;
-  assert.match(toasts.at(-1).title, /DIVERGENCE CAUGHT/);
-
-  await wait(930);
-  assert.equal(toasts.length, stoppedAt, 'the proof pulse continued after the verdict');
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0].title, 'Searching references');
+  assert.equal(toasts[0].message, 'error trapping');
+  await hooks['tool.execute.before']({ tool: 'bash' }, { args: { command: 'test' } });
+  assert.equal(toasts.length, 1, 'unobserved phases must not be invented');
+  assert.equal(hooks.tool, undefined, 'no canned success tool in the generic agent');
 });
 
 test('the TUI declares the VA system map plugin', async () => {

@@ -106,30 +106,49 @@ def _command_profiles() -> dict[str, dict[str, object]]:
     return commands
 
 
-def _config() -> dict[str, Any]:
+def _config(project: Path | None = None) -> dict[str, Any]:
     """Build a portable harness config without writing into the target project."""
     path = REPO_ROOT / "opencode.json"
     if not path.is_file():
         raise ValueError(
             "Coding requires a source checkout. Reinstall the launcher from that checkout."
         )
+    from rosetta.references import configuration, STEERING
+
+    project = (project or REPO_ROOT).resolve()
+    root, repository, sources = configuration(project)
     config = json.loads(path.read_text(encoding="utf-8"))
-    config["mcp"]["rosetta"]["command"] = [sys.executable, "-m", "rosetta.tools"]
-    config["mcp"]["rosetta"].setdefault("environment", {})["PYTHONPATH"] = str(REPO_ROOT)
+    config["mcp"] = {
+        "references": {
+            "type": "local", "enabled": True,
+            "command": [sys.executable, "-m", "rosetta.references", "--project", str(project)],
+            "environment": {"PYTHONPATH": str(REPO_ROOT), "PYTHONUNBUFFERED": "1"},
+        }
+    }
     config["instructions"] = [str(REPO_ROOT / ".opencode" / "instructions.md")]
+    for instruction in repository.get("instructions", []):
+        target = (root / instruction).resolve()
+        if not target.is_file():
+            raise ValueError(f"Repository instruction file does not exist: {target}")
+        config["instructions"].append(str(target))
     plugin = REPO_ROOT / ".opencode" / "plugins" / "rosetta-experience.js"
     config["plugin"] = [plugin.resolve().as_uri()]
-    for name in (
-        "rosetta-agent",
-        "rosetta-plan",
-        "rosetta-verify",
-        "rosetta-explain",
-        "rosetta-divergence",
-    ):
+    for name in ("rosetta-agent", "rosetta-plan", "rosetta-verify"):
         profile = REPO_ROOT / ".opencode" / "agent" / f"{name}.md"
         prompt = profile.read_text(encoding="utf-8").split("---", 2)[-1].strip()
         config.setdefault("agent", {}).setdefault(name, {})["prompt"] = prompt
-    config["command"] = _command_profiles()
+    inventory = ", ".join(s.title for s in sources)
+    if inventory:
+        config["agent"]["rosetta-agent"]["prompt"] += (
+            "\n\nAvailable repository references (use reference_sources for details): " + inventory
+        )
+    commands = repository.get("commands", {})
+    if commands:
+        config["agent"]["rosetta-agent"]["prompt"] += (
+            "\nRepository-provided commands (run with the normal shell tool): " + json.dumps(commands)
+        )
+    config["agent"]["rosetta-agent"]["prompt"] += "\n" + STEERING
+    config["command"] = {}
     return config
 
 
@@ -206,11 +225,12 @@ def cmd_tui(args: argparse.Namespace) -> int:
         env["ROSETTA_PROJECT_DIR"] = str(project)
         env["ROSETTA_HOME"] = str(REPO_ROOT)
         env["ROSETTA_PYTHON"] = sys.executable
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(REPO_ROOT), env.get("PYTHONPATH", "")]))
         # The Rosetta theme lives beside its shipped agents and commands. The
         # TUI can open any target project, so make that source directory
         # discoverable without copying a theme into the operator's home.
-        env.setdefault("OPENCODE_CONFIG_DIR", str(REPO_ROOT / ".opencode"))
-        tui_config = REPO_ROOT / ".opencode" / "tui.json"
+        env.setdefault("OPENCODE_CONFIG_DIR", str(REPO_ROOT / ".opencode" / "generic"))
+        tui_config = REPO_ROOT / ".opencode" / "generic" / "tui.json"
         if not tui_config.is_file():
             raise ValueError(
                 "Rosetta TUI presentation files are missing. Reinstall from a complete release."
@@ -226,10 +246,10 @@ def cmd_tui(args: argparse.Namespace) -> int:
             raise ValueError(f"Corpus directory does not exist: {corpus}")
         env["ROSETTA_CORPUS_DIR"] = str(corpus)
 
-        config = _config()
+        config = _config(project)
         if env.get("OPENCODE_CONFIG_CONTENT"):
             config = _merge_user_config(config, env["OPENCODE_CONFIG_CONTENT"])
-        mcp_env = config["mcp"]["rosetta"].setdefault("environment", {})
+        mcp_env = config["mcp"]["references"].setdefault("environment", {})
         mcp_env["ROSETTA_CORPUS_DIR"] = str(corpus)
         mcp_env["ROSETTA_PROJECT_DIR"] = str(project)
         env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
@@ -239,6 +259,8 @@ def cmd_tui(args: argparse.Namespace) -> int:
             command.append(str(project))
         else:
             command.extend(["run", "--dir", str(project)])
+            if getattr(args, "format", "default") == "json":
+                command.extend(["--format", "json"])
         command.extend(["--agent", "rosetta-agent"])
         if args.model:
             from rosetta import models as model_registry
@@ -1090,7 +1112,7 @@ def _positive_seconds(value: str) -> float:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="rosetta",
-        description="TUI editor for legacy code and persistent FileMan content.",
+        description="Coding agent with repository-provided technical references.",
         epilog="Run `rosetta` with no arguments to open the TUI in this project.",
     )
     ap.add_argument("--plain", action="store_true", help="no banner")
@@ -1123,6 +1145,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
         p.add_argument("--corpus", type=Path, help="MUMPS routine corpus (default: project)")
         p.add_argument("--prompt", help="run one prompt instead of opening interactively")
+        p.add_argument("--format", choices=("default", "json"), default="default", help="headless tool-event output format")
         p.add_argument(
             "--timeout",
             type=_positive_seconds,

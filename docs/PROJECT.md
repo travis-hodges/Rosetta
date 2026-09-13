@@ -2,7 +2,21 @@
 
 **Ground truth for code nobody can read.**
 
-## Current product direction — September 6, 2026
+## Current product direction — September 13, 2026
+
+Rosetta gives an OpenCode coding agent repository-provided technical references it can
+consult when its existing knowledge is uncertain. The core reference abstraction is a
+`ReferenceSource`: a local document or collection with provenance and cheap relevance
+metadata. It works for language manuals, internal DSLs, SDKs and APIs without new agent
+branches. Retrieval is incremental and optional, alongside ordinary inspect/edit/run tools.
+
+MUMPS/YottaDB is the first real coding demo, configured entirely in `examples/payments`.
+Its runtime uses the existing verifier; the generic reference service does not contain a
+MUMPS mode. See [REFERENCES.md](REFERENCES.md) for configuration, exact commands and
+acceptance criteria. This direction supersedes the older product framing below. The
+frozen runtime interface, database isolation rules and split lock remain protected.
+
+## Previous product direction — September 6, 2026
 
 Rosetta is an editor platform for developers operating obscure legacy
 applications **and their databases**. It turns an operational request into a

@@ -1,0 +1,86 @@
+[
+  {
+    "name": "retry-original-receipt",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "125"
+    ],
+    "globals_in": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    },
+    "stdout": "OK^125",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    }
+  },
+  {
+    "name": "conflicting-amount",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "126"
+    ],
+    "globals_in": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    },
+    "stdout": "ERROR:DUPLICATE",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    }
+  },
+  {
+    "name": "conflicting-account",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "B",
+      "125"
+    ],
+    "globals_in": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    },
+    "stdout": "ERROR:DUPLICATE",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    }
+  },
+  {
+    "name": "numeric-spelling-retry",
+    "routine": "PAYMENT",
+    "entry": "$$POST",
+    "args": [
+      "p1",
+      "A",
+      "0125"
+    ],
+    "globals_in": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    },
+    "stdout": "OK^125",
+    "globals_out": {
+      "^RPAY(\"balance\",\"A\")": "350",
+      "^RPAY(\"receipt\",\"p1\")": "A^125^125",
+      "^RPAY(\"receipt\",\"p2\")": "A^225^350"
+    }
+  }
+]

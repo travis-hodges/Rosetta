@@ -1,109 +1,41 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "rosetta": {
+    "references": {
       "type": "local",
       "command": [
         "python3",
         "-m",
-        "rosetta.tools"
+        "rosetta.references"
       ],
-      "enabled": true,
-      "environment": {
-        "PYTHONUNBUFFERED": "1",
-        "ROSETTA_TOOLS_BACKEND": "auto"
-      }
+      "enabled": true
     }
   },
   "model": "opencode/big-pickle",
-  "provider": {
-    "opencode": {
-      "models": {
-        "big-pickle": {
-          "name": "Translator 1.0"
-        }
-      }
-    }
-  },
   "default_agent": "rosetta-agent",
   "instructions": [
     ".opencode/instructions.md"
   ],
-  "username": "rosetta",
-  "permission": {
-    "bash": {
-      "git push*": "deny",
-      "git commit*": "deny",
-      "gh pr *": "deny",
-      "docker rm*": "deny",
-      "docker stop*": "deny",
-      "*": "allow"
-    }
-  },
   "agent": {
     "rosetta-agent": {
-      "description": "Rosetta Agent mode: understand, modify, and mechanically verify VA VistA MUMPS.",
+      "description": "Implement and verify software changes, consulting technical references when useful.",
       "mode": "primary",
-      "color": "#ff8053",
-      "temperature": 0.1,
-      "permission": {
-        "bash": {
-          "git push*": "deny",
-          "git commit*": "deny",
-          "gh pr *": "deny",
-          "docker rm*": "deny",
-          "docker stop*": "deny",
-          "*": "allow"
-        },
-        "edit": "allow",
-        "webfetch": "ask"
-      }
+      "color": "#ddf95c"
     },
     "rosetta-plan": {
-      "description": "Rosetta Plan mode: map unfamiliar MUMPS routines and globals before editing.",
+      "description": "Inspect software and references without modifying files.",
       "mode": "primary",
-      "color": "#f4f1e9",
-      "temperature": 0.1,
       "permission": {
-        "bash": "deny",
-        "edit": "deny"
+        "edit": "deny",
+        "bash": "deny"
       }
     },
     "rosetta-verify": {
-      "description": "Rosetta Verify mode: prove a candidate against executable behavior and database state.",
+      "description": "Run project checks and report evidence without editing code.",
       "mode": "primary",
-      "color": "#ddf95c",
-      "temperature": 0,
       "permission": {
-        "bash": "deny",
         "edit": "deny"
       }
-    },
-    "rosetta-divergence": {
-      "description": "Explain a Rosetta verification divergence in plain language.",
-      "mode": "subagent",
-      "color": "#c4deaa",
-      "temperature": 0,
-      "permission": {
-        "bash": "deny",
-        "edit": "deny"
-      }
-    },
-    "rosetta-explain": {
-      "description": "Explain an unfamiliar VistA routine using Rosetta's static and FileMan evidence.",
-      "mode": "subagent",
-      "color": "#a1a49a",
-      "temperature": 0.1,
-      "permission": {
-        "bash": "deny",
-        "edit": "deny"
-      }
-    },
-    "build": {
-      "disable": true
-    },
-    "plan": {
-      "disable": true
     }
   }
 }

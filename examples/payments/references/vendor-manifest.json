@@ -1,0 +1,26 @@
+[
+  {
+    "file": "functions.md",
+    "url": "https://docs.yottadb.com/ProgrammersGuide/functions.html",
+    "download_sha256": "a72559bca75f36c8ebe0fed0e3d44195de274d5c4d68fb8c0c9721b125c12d2b",
+    "local_sha256": "85b0030a868072f3e5c7f8b61beeb79073a4ed56d5534d1b1ea1e7315b32ec48"
+  },
+  {
+    "file": "langfeat.md",
+    "url": "https://docs.yottadb.com/ProgrammersGuide/langfeat.html",
+    "download_sha256": "acc9d72194844edb243856de741bfa4c4c063ce57113b39954ffdd8e6bb50b0c",
+    "local_sha256": "b7a93c2fa2954728256d027cd41958a850d2513cc3604828fad48405a8262d54"
+  },
+  {
+    "file": "errproc.md",
+    "url": "https://docs.yottadb.com/ProgrammersGuide/errproc.html",
+    "download_sha256": "da55e0d81e69568870848595c8b6a7da23180ad61f3ec153e976d4215fa6969a",
+    "local_sha256": "9d4046ea2fd035e5606d57329364981d5ffbeecd267fc0b44705339dab8cfa7f"
+  },
+  {
+    "file": "commands.md",
+    "url": "https://docs.yottadb.com/ProgrammersGuide/commands.html",
+    "download_sha256": "d7ea09edd9c349520ab01fd717feb75c5d1fb11ed3855715f63f57549f8573d5",
+    "local_sha256": "d052db1c7ed076d153e8bfd2025b1ff298fe4b7901fda3f65cb70f1b5b9f08a5"
+  }
+]

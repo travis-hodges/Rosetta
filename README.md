@@ -1,175 +1,62 @@
 # Rosetta
 
-**The editor for systems nobody can replace.**
+Coding models have uneven competence in unfamiliar technical environments. Rosetta
+adds repository-provided technical references to OpenCode so the agent can look up
+missing knowledge, edit real software, and check the result against its runtime.
 
-Rosetta helps developers operate legacy applications and their databases. Start
-with the requested operational outcome, discover what the old system actually
-does, make controlled code and state changes, and run executable evaluation as
-the final gate. For the hackathon, it is optimized around real VA VistA MUMPS
-running under YottaDB:
+- Four real tools: source inventory, search, incremental reading, and examples.
+- Local `rosetta.json` configuration for manuals, SDKs, APIs and internal documentation.
+- Deterministic lexical retrieval with source, heading, line and hash provenance.
+- Real MUMPS payment demo with YottaDB execution and output/database checks.
+- No new package dependencies or mandatory language-detection step.
 
-> **REQUEST → DISCOVER → CONTRACT → EDIT → EVALUATE → SHIP**
+[Setup, configuration and demo commands](docs/REFERENCES.md).
 
-The U.S. government runs on languages almost nobody can read anymore — MUMPS,
-COBOL, JOVIAL, CMS-2 — and AI models are weak on them because there is almost
-no training data and no way to export more from a restricted environment. The
-dangerous failure mode isn't incapacity, it's that models are **fluent and
-confidently wrong** about systems people depend on.
-
-The insight: **you don't need a corpus if you have an interpreter.**
-
-Stop teaching the model the language. Give it a way to check its own work. Snapshot the
-system, apply the change, run both versions against the same inputs, and diff the program
-output **and** the resulting database state. Correctness stops being an opinion.
-
-The verifier is the final-evaluation service inside the editor. It also grades the
-benchmark, generates verified training data, and acts as the reward function
-for reinforcement fine-tuning. The benchmark demonstrates how much better a
-model performs inside Rosetta; it is not a separate product.
-
-- **Proving ground:** MUMPS / VistA under YottaDB — the only real, public,
-  production-scale federal legacy estate.
-- **Task:** safe modification, not translation.
-- **Headline metric:** false-confidence rate — how often the model asserts correctness
-  while verification fails.
-
-📖 **[`docs/PROJECT.md`](docs/PROJECT.md) is the master document** — market context,
-architecture, frozen contract, benchmark methodology, build plan, and pitch.
-
----
-
-## Start here
-
-Install the command once, then open Rosetta from the project you want to work on:
-
-```bash
+```sh
 bash scripts/install.sh --bin-dir "$HOME/.local/bin"
-cd /path/to/your/project
-rosetta
+rosetta /path/to/project
 ```
 
-That bare command opens the Rosetta TUI in the current
-directory. It brings the coding agent, verifier tools, operating instructions
-and workflow commands without writing configuration into your project.
+Requires Python 3.11+ and an installed/configured OpenCode harness. Local retrieval is
+offline; hosted model access needs a connection. The MUMPS demo additionally needs
+the existing Docker/YottaDB runtime. [Runtime setup](docs/REFERENCES.md#real-mumps-demo).
 
-| Press Tab | Purpose |
-|---|---|
-| **Rosetta Agent** | understand, edit, and complete the coding loop |
-| **Rosetta Plan** | map routines, calls, globals, and verification cases |
-| **Rosetta Verify** | prove and explain behavior without authoring code |
+## Run the MUMPS demo
 
-Rosetta is always active; Tab changes its mode. The default demo model appears
-as **Translator 1.0**. Type `/start` for orientation, `/change REQUEST` to run
-the primary intentional code-and-database workflow, `/database REQUEST` to
-manage persistent state, or `/` to discover every supporting capability.
-
-For the judge path, type `/demo`. Rosetta runs a short proof flight against a
-real VA VistA routine in YottaDB: a bad candidate is rejected, the repaired
-candidate is replayed, database rollback is confirmed, and content-addressed
-receipts are saved under `.rosetta/proofs/` in the active project. Animated
-stage notifications keep the TUI legible while the interpreter works. If the
-live runtime misses the 38-second demo budget, Rosetta fails over to the
-committed AJETIU2 audit trace and labels it **RECORDED**—never live.
-
-The terminal ships with a charcoal, cream, and lemon presentation preset, stacked one-column
-diffs for narrow legacy source, and a blinking block cursor. During executable
-tools, a restrained scanner pulse stays in motion until the runtime returns a
-verdict. Set `OPENCODE_TUI_CONFIG` yourself to keep an operator-selected preset.
-
-`rosetta /another/project` opens a different workspace. Use `--model` to
-choose a registered name or provider model, and `--corpus` when the MUMPS
-sources are not the project directory.
-
-The same workflows remain available as standalone commands:
-
-| | |
-|---|---|
-| `rosetta change -m "..." --set REF VALUE` | capture an operational database change against current state |
-| `rosetta db preview PLAN` | detect conflicts without writing |
-| `rosetta db apply PLAN --yes` | snapshot, atomically persist, verify, and receipt the change |
-| `rosetta db rollback RECEIPT --yes` | atomically restore exact before-values; retain the full snapshot as fallback |
-| `rosetta fileman --file FILE [--ien IEN] --field FIELD VALUE` | create or update validated FileMan content persistently |
-| `rosetta edit ROUTINE -m "..."` | perform a behavior-preserving routine repair/refactor |
-| `rosetta verify ROUTINE -c f.m` | run final regression evaluation (exit 1 on divergence) |
-| `rosetta model add NAME id` | bring your own model |
-| `rosetta bench run --model NAME` | measure it on the held-out eval set |
-| `rosetta train sft` | turn verified work into training data |
-
-📖 **[`docs/WORKFLOWS.md`](docs/WORKFLOWS.md)** walks the editor, database,
-evaluation, and benchmark workflows end to end.
-
-The underlying `python3 -m rosetta.*` entry points still work and keep their
-own flags. `rosetta --help` lists the supported front-door aliases.
-
----
-
-## What works today
-
-Verified on this machine against a live WorldVistA container. Commands are runnable.
-
-| | Status |
-|---|---|
-| **The verifier** | `python3 -m rosetta.core.selftest` — passes in ~2.5s |
-| **FileMan editor** | persistent top-level record creation through `UPDATE^DIE` and updates through `FILE^DIE`, with validation and reread |
-| **Database primitives** | exact-node reads; pinned plans; conflict preview; persistent atomic apply; guarded rollback |
-| **MCP tool server** | 8 tools over stdio; `rosetta mcp list` reports `rosetta connected` |
-| **The side-by-side** | `python3 -m rosetta.demo` — runs offline, no container, no network |
-| **Live proof flight** | TUI `/demo` — live YottaDB first, bounded recorded fallback, receipts |
-| **Mutation generator** | 8 operators; 0.00% defect rate measured against the real YottaDB compiler |
-| **Split lock** | Written and frozen: 350 train / 150 eval, partitioned by duplicate cluster |
-| **Comprehension labels** | 1,493 pairs from the train split, plus the RFT grader |
-| **Benchmark results** | **None published.** No full run has happened yet. |
-| **Default UI** | `rosetta` — the Rosetta TUI, project-aware tools and workflow commands |
-
-The load-bearing demonstration is in the selftest: a `CMP_FLIP` injected into a real VistA
-routine is caught by diffing global state, and the report names the exact node that moved —
-`^PXRMINDX(9000010.71,"IP","10D","Z00.00",777,3250101,4242)`. That is the whole thesis in
-one line of output.
-
-`python3 -m rosetta.demo` shows the money moment on `^DPT(DFN,.21)`, the next-of-kin node of
-the PATIENT file. 765 patients have that node; 69 have it present with the name piece blank.
-A plausible-looking refactor returns an empty string for every one of those where the
-original returned `"Not Entered"` — fluently explained, entirely wrong, and caught
-mechanically.
-
-**No benchmark number is published, and the site shows a pending state rather than a
-placeholder.** Every figure it can display is read from `results/summary.json`, which is
-written only by a real run.
-
-## Working in this repository
-
-Agents and contributors read [`AGENTS.md`](AGENTS.md) first, then
-[`docs/PROJECT.md`](docs/PROJECT.md) for the architecture and
-[`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) for the surface. Claude sessions additionally read
-[`CLAUDE.md`](CLAUDE.md).
-
-The hard rules that protect every published number:
-
-- `rosetta/core/interface.py` is **frozen** — announce before changing it.
-- Only `rosetta/core/` touches YottaDB.
-- Always `clean_state()` around execution.
-- Never rewrite `data/tasks/split.lock.json`.
-- Don't re-propose an approach already rejected in `docs/PROJECT.md` §5.
-
-## Website
-
-The landing page is [`index.html`](index.html) plus [`src/styles.css`](src/styles.css) and
-[`src/main.js`](src/main.js): a single scrolling page with original canvas artwork, served
-as plain static files. There is no bundler and no package installation; Node 22+ is needed
-only for the optional server, build, and tests:
-
-```bash
-npm run dev
-npm test
-npm run build
-npm run preview
+```sh
+export ROSETTA_CONTAINER=rosetta-reference-verify
+bash scripts/bootstrap.sh
+python3 -m rosetta.core.selftest
+python3 examples/payments/verify.py
+rosetta examples/payments
 ```
 
-`npm run build` copies the page, `src/`, and `public/` into `dist/`, which is what Vercel
-publishes. It parses `src/main.js` and checks every local asset the page references, so a
-syntax error or a dead path fails the build rather than the first visitor's browser.
+Ask the agent to make payments safe to retry without crediting an account twice.
+The repository supplies authoritative documentation and repeatable tests. It starts
+with 10 passing regression cases and four failing feature cases. The agent must
+choose and implement its own patch. [Complete task and setup](docs/REFERENCES.md#real-mumps-demo).
 
-Typography loads Space Grotesk and Space Mono from the Google Fonts CDN; everything else is
-local. The benchmark contract is enforced by the producer in
-[`rosetta/bench/report.py`](rosetta/bench/report.py) — the page states that published
-results are pending and never hand-authors performance values.
+The recorded acceptance run includes reference lookup, actual source edits, a real
+failure, repair and 15 passing final runtime cases. A second non-MUMPS source was
+registered and retrieved using the same tools. [Inspect the evidence](docs/evidence/reference-demo).
+
+## Existing runtime capabilities
+
+The VistA/FileMan tools remain available through `rosetta fileman`, `rosetta db`,
+`rosetta eval`, `rosetta verify` and the benchmark CLI. The frozen core API and split
+lock are unchanged. [Usage](docs/USAGE.md) · [Architecture](docs/PROJECT.md).
+
+`rosetta demo` is the historical recorded verifier replay. To watch a new coding
+agent task, open `examples/payments` as above. No benchmark improvement is claimed.
+The finite test suite does not establish safety under concurrent writers or for
+untested external side effects.
+
+## Add your own knowledge
+
+Register a local manual in `rosetta.json`; no central agent changes are needed.
+[Configuration and retrieval guide](docs/REFERENCES.md) ·
+[Non-MUMPS registration example](examples/widget-sdk/rosetta.json).
+
+Code is Apache-2.0. Bundled YottaDB documentation is distributed separately under
+GNU FDL 1.3 or later, with attribution and license text in
+`examples/payments/references/`.

@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "ledger",
+      "title": "Payment ledger project contract",
+      "path": "references/project.md",
+      "kind": "repository",
+      "tags": [
+        "payment",
+        "receipt",
+        "ledger"
+      ],
+      "file_patterns": [
+        "routines/*.m",
+        "*.m"
+      ],
+      "priority": 10
+    },
+    {
+      "id": "ydb-functions",
+      "title": "YottaDB intrinsic functions",
+      "path": "references/vendor/functions.md",
+      "kind": "vendor",
+      "tags": [
+        "MUMPS",
+        "M",
+        "YottaDB"
+      ],
+      "file_patterns": [
+        "routines/*.m",
+        "*.m"
+      ],
+      "priority": 8,
+      "origin": "https://docs.yottadb.com/ProgrammersGuide/functions.html"
+    },
+    {
+      "id": "ydb-langfeat",
+      "title": "YottaDB language semantics",
+      "path": "references/vendor/langfeat.md",
+      "kind": "vendor",
+      "tags": [
+        "MUMPS",
+        "M",
+        "YottaDB"
+      ],
+      "file_patterns": [
+        "routines/*.m",
+        "*.m"
+      ],
+      "priority": 8,
+      "origin": "https://docs.yottadb.com/ProgrammersGuide/langfeat.html"
+    },
+    {
+      "id": "ydb-commands",
+      "title": "YottaDB commands and examples",
+      "path": "references/vendor/commands.md",
+      "kind": "vendor",
+      "tags": [
+        "MUMPS",
+        "M",
+        "YottaDB"
+      ],
+      "file_patterns": [
+        "routines/*.m",
+        "*.m"
+      ],
+      "priority": 8,
+      "origin": "https://docs.yottadb.com/ProgrammersGuide/commands.html"
+    },
+    {
+      "id": "ydb-errproc",
+      "title": "YottaDB error processing",
+      "path": "references/vendor/errproc.md",
+      "kind": "vendor",
+      "tags": [
+        "MUMPS",
+        "M",
+        "YottaDB"
+      ],
+      "file_patterns": [
+        "routines/*.m",
+        "*.m"
+      ],
+      "priority": 8,
+      "origin": "https://docs.yottadb.com/ProgrammersGuide/errproc.html"
+    }
+  ],
+  "commands": {
+    "test": [
+      "python3",
+      "verify.py"
+    ]
+  }
+}

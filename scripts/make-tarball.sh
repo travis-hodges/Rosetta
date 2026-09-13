@@ -32,7 +32,7 @@ name = f"rosetta-{rosetta.__version__}"
 archive = out / f"{name}.tar.gz"
 
 INCLUDE = [
-    "rosetta", "bin", "scripts", "data", "results/canned", ".opencode",
+    "rosetta", "bin", "scripts", "data", "examples", "results/canned", ".opencode",
     "docs", "README.md", "AGENTS.md", "CLAUDE.md",
     "LICENSE", "NOTICE", "pyproject.toml", "opencode.json",
 ]

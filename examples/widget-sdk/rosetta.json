@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "sources": [{
+    "id": "widget-sdk",
+    "title": "Internal Widget SDK v1",
+    "path": "manual.md",
+    "kind": "internal",
+    "tags": ["widget", "SDK", "revision"],
+    "file_patterns": ["*.widget", "*.js"],
+    "priority": 10
+  }]
+}

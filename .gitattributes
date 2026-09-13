@@ -1,0 +1,2 @@
+# Preserve the exact vendored documentation bytes cited by recorded tool evidence.
+examples/payments/references/vendor/*.md -whitespace
