@@ -228,6 +228,7 @@ def cmd_tui(args: argparse.Namespace) -> int:
         env["PWD"] = str(project)
         env["ROSETTA_PROJECT_DIR"] = str(project)
         env["ROSETTA_HOME"] = str(REPO_ROOT)
+        env["ROSETTA_VERSION"] = __version__
         env["ROSETTA_PYTHON"] = sys.executable
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(REPO_ROOT), env.get("PYTHONPATH", "")]))
         # The Rosetta theme lives beside its shipped agents and commands. The

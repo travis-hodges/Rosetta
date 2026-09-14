@@ -18,7 +18,9 @@ import {
   inferIdentity,
   newestBy,
   normalizeEvent,
+  defaultExpandedDirectories,
   projectDirectoryTree,
+  projectExplorerTree,
   projectFileStatus,
   referenceSummary,
   resolveRoutineRoot,
@@ -70,6 +72,14 @@ test('the shipped and generic TUI presets both declare the live project map', as
 
   const source = await readFile(new URL('../.opencode/plugins/rosetta-system-map.tsx', import.meta.url), 'utf8');
   assert.match(source, /sidebar_content/);
+  assert.match(source, /sidebar_title/);
+  assert.match(source, /sidebar_footer/);
+  assert.match(source, /ROSETTA SESSION:/);
+  assert.match(source, /ROSETTA_VERSION/);
+  assert.match(source, /onMouseDown/);
+  assert.match(source, /onKeyDown/);
+  assert.doesNotMatch(source, /<scrollbox/);
+  assert.doesNotMatch(source, /more directories/);
   assert.match(source, /PROJECT/);
   assert.match(source, /REFERENCES/);
   assert.match(source, /MUMPS ROUTINES/);
@@ -329,6 +339,24 @@ test('project directory rows prefer working files over licenses and lock files',
   const [references] = projectDirectoryTree(files, { fileBudget: 4, perDirectory: 4 }).tree;
   assert.deepEqual(references.children.map(item => item.name), ['project.md', 'vendor-manifest.json']);
   assert.equal(references.hidden, 2);
+});
+
+test('project explorer is a complete nested tree with changed status rolled up', () => {
+  const files = [
+    { file: '/project/README.md', relative: 'README.md', name: 'README.md', status: STATUS.IDLE, change: '' },
+    { file: '/project/src/app/page.tsx', relative: 'src/app/page.tsx', name: 'page.tsx', status: STATUS.CHANGED, change: 'edited' },
+    { file: '/project/src/lib/store.ts', relative: 'src/lib/store.ts', name: 'store.ts', status: STATUS.IDLE, change: '' },
+  ];
+  const tree = projectExplorerTree(files);
+  assert.equal(tree.length, 2);
+  const src = tree.find(node => node.key === 'src');
+  assert.equal(src.type, 'directory');
+  assert.equal(src.count, 2);
+  assert.equal(src.status, STATUS.CHANGED);
+  const app = src.children.find(node => node.key === 'src/app');
+  assert.equal(app.count, 1);
+  assert.equal(app.children[0].key, 'src/app/page.tsx');
+  assert.deepEqual(defaultExpandedDirectories(files).sort(), ['src', 'src/app']);
 });
 
 test('Git-backed directory scans show changes that predate the TUI session', async () => {

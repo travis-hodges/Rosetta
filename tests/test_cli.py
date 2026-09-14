@@ -11,16 +11,19 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from rosetta import models  # noqa: E402
-from rosetta.cli import WORKFLOWS, build_parser, main  # noqa: E402
+from rosetta import __version__, models  # noqa: E402
+from rosetta.cli import WORKFLOWS, build_parser, cmd_tui, main  # noqa: E402
 from rosetta.workflow import WorkflowError  # noqa: E402
 
 
@@ -98,6 +101,26 @@ class ParserTests(unittest.TestCase):
                    and getattr(a, "dest", None) == "cmd"]
         self.assertNotIn("gui", actions[0].choices)
         self.assertFalse((Path(__file__).resolve().parents[1] / "rosetta" / "gui").exists())
+
+
+class TuiLaunchTests(unittest.TestCase):
+    def test_launcher_supplies_the_rosetta_version_to_the_sidebar(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(
+                project=Path(directory),
+                corpus=None,
+                timeout=None,
+                prompt=None,
+                model=None,
+            )
+            completed = SimpleNamespace(returncode=0)
+            with mock.patch.dict(os.environ, {"OPENCODE_CONFIG_CONTENT": ""}), \
+                    mock.patch("rosetta.cli._harness", return_value="opencode"), \
+                    mock.patch("rosetta.cli.subprocess.run", return_value=completed) as launched:
+                self.assertEqual(cmd_tui(args), 0)
+
+            environment = launched.call_args.kwargs["env"]
+            self.assertEqual(environment["ROSETTA_VERSION"], __version__)
 
 
 class ModelRegistryTests(unittest.TestCase):

@@ -7,9 +7,11 @@ import path from "node:path"
 import {
   STATUS,
   aggregateStatus,
+  defaultExpandedDirectories,
   directoryTree,
   normalizeEvent,
   projectDirectoryTree,
+  projectExplorerTree,
   scanSystem,
 } from "../lib/rosetta-system-model.js"
 
@@ -26,6 +28,7 @@ const colors = (api: TuiPluginApi) => {
     muted: theme.textMuted,
     border: theme.border,
     panel: theme.backgroundPanel,
+    selected: theme.backgroundElement,
     accent: theme.primary,
     info: theme.info,
   }
@@ -79,6 +82,19 @@ const fileNote = (item: any) => {
 
 function ProjectDirectory(props: { api: TuiPluginApi; snapshot: any }) {
   const skin = () => colors(props.api)
+  const [expanded, setExpanded] = createSignal(
+    new Set<string>(defaultExpandedDirectories(props.snapshot.project.files)),
+  )
+  const tree = createMemo(() => projectExplorerTree(props.snapshot.project.files))
+  const toggle = (key: string, next?: boolean) => {
+    setExpanded((current) => {
+      const value = new Set(current)
+      const shouldExpand = next ?? !value.has(key)
+      if (shouldExpand) value.add(key)
+      else value.delete(key)
+      return value
+    })
+  }
   return (
     <box flexDirection="column" flexShrink={0}>
       <box flexDirection="row" justifyContent="space-between">
@@ -87,34 +103,90 @@ function ProjectDirectory(props: { api: TuiPluginApi; snapshot: any }) {
           {countLabel(props.snapshot.project.files.length, "file")}
         </text>
       </box>
-      <For each={props.snapshot.project.tree}>
-        {(dir: any) => (
-          <box flexDirection="column" flexShrink={0}>
-            <Section api={props.api} label={dir.label} count={dir.count} status={dir.status} />
-            <For each={dir.children}>
-              {(item: any) => (
-                <Row
-                  api={props.api}
-                  status={item.status}
-                  label={item.name}
-                  glyph={item.status === STATUS.CHANGED ? "●" : "·"}
-                  note={fileNote(item)}
-                />
-              )}
-            </For>
-            <Show when={dir.hidden > 0}>
-              <text fg={skin().muted} wrapMode="none">    {dir.hidden} more</text>
-            </Show>
-          </box>
+      <For each={tree()}>
+        {(node: any) => (
+          <ProjectTreeNode api={props.api} node={node} depth={0} expanded={expanded} toggle={toggle} />
         )}
       </For>
-      <Show when={props.snapshot.project.hiddenDirectories > 0}>
-        <text fg={skin().muted} wrapMode="none">  + {props.snapshot.project.hiddenDirectories} more directories</text>
-      </Show>
       <Show when={props.snapshot.project.files.length === 0}>
         <text fg={skin().muted}>  No project files</text>
       </Show>
     </box>
+  )
+}
+
+function ProjectTreeNode(props: {
+  api: TuiPluginApi
+  node: any
+  depth: number
+  expanded: () => Set<string>
+  toggle: (key: string, next?: boolean) => void
+}) {
+  const skin = () => colors(props.api)
+  const [focused, setFocused] = createSignal(false)
+  const open = () => props.node.type === "directory" && props.expanded().has(props.node.key)
+  const tone = () => props.node.status === STATUS.CHANGED ? skin().changed : skin().muted
+  const activate = () => props.toggle(props.node.key)
+  const onKeyDown = (event: any) => {
+    if (event.name === "return" || event.name === "space") activate()
+    else if (event.name === "right" && !open()) props.toggle(props.node.key, true)
+    else if (event.name === "left" && open()) props.toggle(props.node.key, false)
+    else return
+    event.preventDefault?.()
+    event.stopPropagation?.()
+  }
+
+  return (
+    <Show
+      when={props.node.type === "directory"}
+      fallback={
+        <box flexDirection="row" justifyContent="space-between" paddingLeft={Math.min(props.depth * 2, 14)}>
+          <text fg={tone()} wrapMode="none" truncate>
+            {props.node.status === STATUS.CHANGED ? "●" : "·"} {props.node.name}
+          </text>
+          <Show when={fileNote(props.node)}>
+            <text fg={tone()} wrapMode="none" flexShrink={0}> {fileNote(props.node)}</text>
+          </Show>
+        </box>
+      }
+    >
+      <box flexDirection="column" flexShrink={0}>
+        <box
+          flexDirection="row"
+          justifyContent="space-between"
+          paddingLeft={Math.min(props.depth * 2, 12)}
+          focusable
+          backgroundColor={focused() ? skin().selected : undefined}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onMouseDown={(event: any) => {
+            if (event.button !== 0) return
+            event.preventDefault?.()
+            event.stopPropagation?.()
+            activate()
+          }}
+          onKeyDown={onKeyDown}
+        >
+          <box flexGrow={1} flexShrink={1} minWidth={0}>
+            <text fg={tone()} wrapMode="none" truncate>{open() ? "▼" : "▶"} {props.node.label}</text>
+          </box>
+          <text fg={tone()} wrapMode="none" flexShrink={0}> {props.node.count}</text>
+        </box>
+        <Show when={open()}>
+          <For each={props.node.children}>
+            {(child: any) => (
+              <ProjectTreeNode
+                api={props.api}
+                node={child}
+                depth={props.depth + 1}
+                expanded={props.expanded}
+                toggle={props.toggle}
+              />
+            )}
+          </For>
+        </Show>
+      </box>
+    </Show>
   )
 }
 
@@ -226,15 +298,34 @@ function Verification(props: { api: TuiPluginApi; snapshot: any }) {
 
 function Directory(props: { api: TuiPluginApi; snapshot: any }) {
   return (
-    <scrollbox flexGrow={1} flexShrink={1} minHeight={0}
-               verticalScrollbarOptions={{ visible: true }}>
-      <box flexDirection="column" flexShrink={0}>
-        <ProjectDirectory api={props.api} snapshot={props.snapshot} />
-        <References api={props.api} snapshot={props.snapshot} />
-        <MumpsRoutines api={props.api} snapshot={props.snapshot} />
-        <Verification api={props.api} snapshot={props.snapshot} />
-      </box>
-    </scrollbox>
+    <box flexDirection="column" flexShrink={0}>
+      <ProjectDirectory api={props.api} snapshot={props.snapshot} />
+      <References api={props.api} snapshot={props.snapshot} />
+      <MumpsRoutines api={props.api} snapshot={props.snapshot} />
+      <Verification api={props.api} snapshot={props.snapshot} />
+    </box>
+  )
+}
+
+function SessionTitle(props: { api: TuiPluginApi; title: string }) {
+  const skin = () => colors(props.api)
+  return (
+    <box flexDirection="column" paddingBottom={1}>
+      <text fg={skin().muted} wrapMode="none">ROSETTA SESSION:</text>
+      <text fg={skin().text} wrapMode="none" truncate><b>{props.title || "Untitled session"}</b></text>
+    </box>
+  )
+}
+
+function RosettaFooter(props: { api: TuiPluginApi }) {
+  const skin = () => colors(props.api)
+  const version = process.env.ROSETTA_VERSION || "development"
+  return (
+    <box flexDirection="row">
+      <text fg={skin().accent}>● </text>
+      <text fg={skin().text}><b>Rosetta</b></text>
+      <text fg={skin().muted}> v{version}</text>
+    </box>
   )
 }
 
@@ -388,11 +479,17 @@ const tui: TuiPlugin = async (api) => {
   api.slots.register({
     order: 10,
     slots: {
+      sidebar_title(_context, props) {
+        return <SessionTitle api={api} title={props.title} />
+      },
       home_bottom() {
         return <HomeIdentity api={api} snapshot={() => snapshot} revision={revision} />
       },
       sidebar_content(_context, props) {
         return <SystemPanel api={api} session_id={props.session_id} snapshot={() => snapshot} revision={revision} />
+      },
+      sidebar_footer() {
+        return <RosettaFooter api={api} />
       },
     },
   })

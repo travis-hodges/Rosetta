@@ -343,6 +343,85 @@ export function projectDirectoryTree(files, {
   }
 }
 
+// The compact directory summary above is useful for status rollups, but it is
+// not an explorer: omitted directories cannot be opened.  Keep a second,
+// lossless representation for the interactive sidebar.  Every directory node
+// contains its real children and rolls up the status of every descendant file.
+export function projectExplorerTree(files) {
+  const root = { key: "", name: "", directories: new Map(), files: [] }
+
+  for (const item of files) {
+    const parts = String(item.relative || item.name || "")
+      .split(/[\\/]+/)
+      .filter(Boolean)
+    if (!parts.length) continue
+
+    let current = root
+    for (const part of parts.slice(0, -1)) {
+      const key = current.key ? `${current.key}/${part}` : part
+      if (!current.directories.has(part)) {
+        current.directories.set(part, { key, name: part, directories: new Map(), files: [] })
+      }
+      current = current.directories.get(part)
+    }
+    current.files.push({
+      ...item,
+      type: "file",
+      key: item.relative,
+      name: parts.at(-1),
+    })
+  }
+
+  const build = (directory) => {
+    const directories = [...directory.directories.values()].map((child) => {
+      const children = build(child)
+      const descendantFiles = children.flatMap((node) =>
+        node.type === "file" ? [node] : node.descendantFiles
+      )
+      return {
+        type: "directory",
+        key: child.key,
+        name: child.name,
+        label: `${child.name}/`,
+        children,
+        descendantFiles,
+        count: descendantFiles.length,
+        changed: descendantFiles.filter((item) => item.status === STATUS.CHANGED).length,
+        status: aggregateStatus(descendantFiles.map((item) => item.status)),
+        priority: Math.max(0, ...descendantFiles.map(filePriority)),
+      }
+    })
+
+    const nodes = [...directories, ...directory.files]
+    return nodes.sort((a, b) =>
+      Number(b.status === STATUS.CHANGED) - Number(a.status === STATUS.CHANGED) ||
+      Number(b.type === "directory") - Number(a.type === "directory") ||
+      (b.priority || filePriority(b)) - (a.priority || filePriority(a)) ||
+      a.name.localeCompare(b.name)
+    )
+  }
+
+  const stripInternalFiles = (nodes) => nodes.map((node) => {
+    if (node.type === "file") return node
+    const { descendantFiles: _descendantFiles, priority: _priority, ...visible } = node
+    return { ...visible, children: stripInternalFiles(node.children) }
+  })
+
+  return stripInternalFiles(build(root))
+}
+
+export function defaultExpandedDirectories(files) {
+  const expanded = new Set()
+  for (const item of files) {
+    if (item.status !== STATUS.CHANGED) continue
+    const parts = String(item.relative || "").split(/[\\/]+/).filter(Boolean)
+    for (let depth = 1; depth < parts.length; depth += 1) {
+      expanded.add(parts.slice(0, depth).join("/"))
+    }
+  }
+  return [...expanded]
+}
+
 function projectView(files) {
   const summary = projectDirectoryTree(files)
   return {
