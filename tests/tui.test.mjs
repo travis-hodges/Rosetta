@@ -13,18 +13,13 @@ import {
   STATUS,
   aggregateStatus,
   databaseArtifactStatus,
-  digestFile,
-  directoryTree,
   inferIdentity,
-  newestBy,
   normalizeEvent,
   defaultExpandedDirectories,
   projectDirectoryTree,
   projectExplorerTree,
   projectFileStatus,
   referenceSummary,
-  resolveRoutineRoot,
-  routineStatus,
   scanProjectDirectory,
   scanSystem,
   walkProject,
@@ -82,10 +77,13 @@ test('the shipped and generic TUI presets both declare the live project map', as
   assert.doesNotMatch(source, /more directories/);
   assert.match(source, /PROJECT/);
   assert.match(source, /REFERENCES/);
-  assert.match(source, /MUMPS ROUTINES/);
   assert.match(source, /file\.watcher\.updated/);
   assert.match(source, /edited/);
   assert.match(source, /verified/);
+  assert.doesNotMatch(source, /MUMPS ROUTINES/);
+  assert.doesNotMatch(source, /ROSETTA_CORPUS_DIR/);
+  assert.doesNotMatch(source, /setInterval/);
+  assert.doesNotMatch(source, /watch\(project/);
   assert.doesNotMatch(source, /ROSETTA_RUNTIME \|\| "YottaDB"/);
   assert.doesNotMatch(source, /ROSETTA_SYSTEM_LANGUAGE \|\| "MUMPS"/);
 
@@ -115,31 +113,14 @@ test('every export of every plugin module is loadable as a plugin', async () => 
   }
 });
 
-test('routine status is red after edit and green only for its exact proof hash', async () => {
-  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-system-'));
-  const file = path.join(project, 'ROUTINE.m');
-  await writeFile(file, 'ROUTINE\n Q\n');
-  const item = { file, routine: 'ROUTINE' };
-
-  assert.equal(routineStatus(item, new Map(), true), STATUS.CHANGED);
-  assert.equal(routineStatus(item, new Map([['ROUTINE', {
-    equivalent: true,
-    candidate_sha256: digestFile(file),
-  }]]), true), STATUS.VERIFIED);
-  assert.equal(routineStatus(item, new Map([['ROUTINE', {
-    equivalent: true,
-    candidate_sha256: 'not-the-current-file',
-  }]]), true), STATUS.CHANGED);
-});
-
-test('system scan exposes the complete routine directory and verified database artifacts', async () => {
+test('system scan treats source files generically and exposes verified database artifacts', async () => {
   const project = await mkdtemp(path.join(tmpdir(), 'rosetta-scan-'));
-  const routines = path.join(project, 'data', 'routines');
+  const source = path.join(project, 'src');
   const changes = path.join(project, '.rosetta', 'changes');
-  await mkdir(routines, { recursive: true });
+  await mkdir(source, { recursive: true });
   await mkdir(changes, { recursive: true });
-  await writeFile(path.join(routines, 'A.m'), 'A\n Q\n');
-  await writeFile(path.join(routines, 'B.m'), 'B\n Q\n');
+  await writeFile(path.join(source, 'legacy.m'), 'LEGACY\n Q\n');
+  await writeFile(path.join(source, 'main.ts'), 'export {}\n');
   await writeFile(path.join(changes, 'change.plan.json'), JSON.stringify({
     schema: 'rosetta-db-change-plan/v1',
     change_id: 'chg-one',
@@ -151,63 +132,14 @@ test('system scan exposes the complete routine directory and verified database a
     snapshot_id: '/snapshots/chg-one',
   }));
 
-  const view = scanSystem({ project, corpus: project });
-  assert.equal(view.identity, 'VA VistA');
-  assert.deepEqual(view.routines.map(item => item.routine), ['A', 'B']);
+  const view = scanSystem({ project });
+  assert.equal(view.identity, path.basename(project));
+  assert.ok(view.project.files.some(item => item.relative === 'src/legacy.m'));
+  assert.equal(view.routines, undefined, 'the TUI must not infer or inventory a language');
   assert.equal(view.changes.length, 2);
   assert.ok(view.changes.every(item => item.status === STATUS.VERIFIED));
   assert.equal(view.snapshots.length, 1);
   assert.equal(view.status.globals, STATUS.VERIFIED);
-
-  // The tree is the layout: one row per directory, carrying the true total.
-  assert.deepEqual(view.tree.map(dir => [dir.label, dir.count, dir.hidden]), [
-    ['data/routines/', 2, 2],
-  ]);
-  assert.equal(view.tree[0].status, STATUS.IDLE);
-});
-
-test('the directory tree keeps the changed files and collapses the untouched bulk', () => {
-  const routines = [
-    { relative: 'A.m', routine: 'A', status: STATUS.IDLE, mtimeMs: 1 },
-    { relative: 'B.m', routine: 'B', status: STATUS.CHANGED, mtimeMs: 3 },
-    { relative: 'C.m', routine: 'C', status: STATUS.VERIFIED, mtimeMs: 2 },
-    { relative: 'nested/D.m', routine: 'D', status: STATUS.IDLE, mtimeMs: 4 },
-  ];
-
-  const tree = directoryTree(routines, { root: 'data/routines' });
-  assert.deepEqual(tree.map(dir => dir.label), ['data/routines/', 'data/routines/nested/']);
-
-  const [top, nested] = tree;
-  assert.equal(top.count, 3);
-  // Newest interesting file first; the single untouched file is a count.
-  assert.deepEqual(top.children.map(item => item.name), ['B.m', 'C.m']);
-  assert.equal(top.hidden, 1);
-  assert.equal(top.status, STATUS.CHANGED);
-
-  assert.equal(nested.count, 1);
-  assert.deepEqual(nested.children, []);
-  assert.equal(nested.hidden, 1);
-  assert.equal(nested.status, STATUS.IDLE);
-});
-
-test('a 500-routine corpus stays inside the sidebar and the budget is per directory', () => {
-  const many = Array.from({ length: 500 }, (unused, index) => ({
-    relative: `R${index}.m`,
-    routine: `R${index}`,
-    status: index < 30 ? STATUS.CHANGED : STATUS.IDLE,
-    mtimeMs: index,
-  }));
-
-  const [dir] = directoryTree(many, { root: 'data/routines', budget: 8 });
-  assert.equal(dir.count, 500);
-  assert.equal(dir.children.length, 8);
-  // Newest first, and the hidden count still accounts for every file.
-  assert.deepEqual(dir.children.map(item => item.name).slice(0, 3), ['R29.m', 'R28.m', 'R27.m']);
-  assert.equal(dir.children.length + dir.hidden, 500);
-
-  // One directory row, its shown children, and one "N unchanged" row -- the
-  // whole routine section fits well inside a ~20-row pane.
-  assert.ok(1 + dir.children.length + 1 <= 12);
 });
 
 test('the proofs section shows the newest few and reports the real total', async () => {
@@ -223,7 +155,7 @@ test('the proofs section shows the newest few and reports the real total', async
     }));
   }
 
-  const view = scanSystem({ project, corpus: project });
+  const view = scanSystem({ project });
   assert.equal(view.proofs.length, RECENT_PROOFS + 4);
   assert.equal(view.recentProofs.length, RECENT_PROOFS);
   assert.equal(view.recentProofs[0].routine, `R${RECENT_PROOFS + 3}`);
@@ -241,21 +173,19 @@ test('system map status and events preserve edited-over-verified priority', () =
     file: 'data/routines/A.m',
     action: 'add',
   });
-  assert.equal(inferIdentity({ project: '/tmp/claims', corpus: '/tmp/claims', explicitName: 'CMS-2 Tactical' }), 'CMS-2 Tactical');
-  assert.equal(newestBy([
-    { routine: 'A', created_at: '2026-01-01' },
-    { routine: 'A', created_at: '2026-01-02' },
-  ], item => item.routine).get('A').created_at, '2026-01-02');
+  assert.equal(inferIdentity({ project: '/tmp/claims', explicitName: 'CMS-2 Tactical' }), 'CMS-2 Tactical');
 });
 
 test('project directory scan walks the working tree and ignores build noise', async () => {
   const project = await mkdtemp(path.join(tmpdir(), 'rosetta-project-'));
   await mkdir(path.join(project, 'src'), { recursive: true });
   await mkdir(path.join(project, 'node_modules'), { recursive: true });
+  await mkdir(path.join(project, '.next'), { recursive: true });
   await mkdir(path.join(project, '.git'), { recursive: true });
   await writeFile(path.join(project, 'README.md'), '# hi\n');
   await writeFile(path.join(project, 'src', 'main.js'), 'console.log(1)\n');
   await writeFile(path.join(project, 'node_modules', 'dep.js'), 'x\n');
+  await writeFile(path.join(project, '.next', 'bundle.js'), 'x\n');
   await writeFile(path.join(project, '.git', 'config'), 'x\n');
 
   const view = scanProjectDirectory({ project });
@@ -286,30 +216,18 @@ test('projectFileStatus is CHANGED only when modified', () => {
   assert.equal(projectFileStatus({}, true), STATUS.CHANGED);
 });
 
-test('scanSystem exposes the project directory alongside the routine corpus', async () => {
+test('scanSystem exposes all project files without language-specific partitioning', async () => {
   const project = await mkdtemp(path.join(tmpdir(), 'rosetta-scan-project-'));
   const routines = path.join(project, 'data', 'routines');
   await mkdir(routines, { recursive: true });
   await writeFile(path.join(routines, 'A.m'), 'A\n Q\n');
   await writeFile(path.join(project, 'README.md'), '# hi\n');
 
-  const view = scanSystem({ project, corpus: project });
+  const view = scanSystem({ project });
   assert.ok(view.project, 'project view missing from scanSystem');
   assert.ok(view.project.files.some(item => item.relative === 'README.md'));
-  assert.ok(view.project.files.every(item => item.relative !== 'data/routines/A.m'),
-    'the routine corpus should be excluded from the project tree');
-});
-
-test('a top-level routines directory is the MUMPS root and never exposes an absolute heading', async () => {
-  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-direct-routines-'));
-  const routines = path.join(project, 'routines');
-  await mkdir(routines, { recursive: true });
-  await writeFile(path.join(routines, 'A.m'), 'A\n Q\n');
-
-  assert.equal(resolveRoutineRoot(project, project), routines);
-  const view = scanSystem({ project, corpus: project });
-  assert.equal(view.tree[0].label, 'routines/');
-  assert.ok(!view.tree[0].label.includes(project));
+  assert.ok(view.project.files.some(item => item.relative === 'data/routines/A.m'),
+    'all source belongs in the generic project tree');
 });
 
 test('project directory summaries are globally bounded and put edited files first', () => {

@@ -1,14 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 import { createMemo, createSignal, For, Show } from "solid-js"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { watch } from "node:fs"
 import path from "node:path"
 
 import {
   STATUS,
   aggregateStatus,
   defaultExpandedDirectories,
-  directoryTree,
   normalizeEvent,
   projectDirectoryTree,
   projectExplorerTree,
@@ -16,7 +14,6 @@ import {
 } from "../lib/rosetta-system-model.js"
 
 const project = path.resolve(process.env.ROSETTA_PROJECT_DIR || process.cwd())
-const corpus = path.resolve(process.env.ROSETTA_CORPUS_DIR || project)
 
 const colors = (api: TuiPluginApi) => {
   const theme = api.theme.current
@@ -229,42 +226,6 @@ function References(props: { api: TuiPluginApi; snapshot: any }) {
   )
 }
 
-function MumpsRoutines(props: { api: TuiPluginApi; snapshot: any }) {
-  const skin = () => colors(props.api)
-  return (
-    <Show when={props.snapshot.routines.length > 0}>
-      <box flexDirection="column" flexShrink={0}>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={skin().text}><b>MUMPS ROUTINES</b></text>
-          <text fg={skin()[props.snapshot.status.routines as "idle" | "changed" | "verified"] || skin().muted}>
-            {props.snapshot.routines.length}
-          </text>
-        </box>
-      <For each={props.snapshot.tree}>
-        {(dir: any) => (
-          <box flexDirection="column" flexShrink={0}>
-            <Section api={props.api} label={dir.label} count={dir.count} status={dir.status} />
-            <For each={dir.children}>
-              {(item: any) => (
-                <Row
-                  api={props.api}
-                  status={item.status}
-                  label={item.name}
-                  note={item.status === STATUS.CHANGED ? "Δ" : "✓"}
-                />
-              )}
-            </For>
-            <Show when={dir.hidden > 0}>
-              <text fg={skin().muted} wrapMode="none">    {dir.hidden} clean</text>
-            </Show>
-          </box>
-        )}
-      </For>
-      </box>
-    </Show>
-  )
-}
-
 function Verification(props: { api: TuiPluginApi; snapshot: any }) {
   const skin = () => colors(props.api)
   const visible = () => props.snapshot.changes.length > 0 || props.snapshot.proofs.length > 0
@@ -301,7 +262,6 @@ function Directory(props: { api: TuiPluginApi; snapshot: any }) {
     <box flexDirection="column" flexShrink={0}>
       <ProjectDirectory api={props.api} snapshot={props.snapshot} />
       <References api={props.api} snapshot={props.snapshot} />
-      <MumpsRoutines api={props.api} snapshot={props.snapshot} />
       <Verification api={props.api} snapshot={props.snapshot} />
     </box>
   )
@@ -340,17 +300,7 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
       [path.resolve(project, item.file), item],
     ]))
     const base = props.snapshot()
-    const routines = base.routines.map((item: any) => {
-      if (item.status === STATUS.VERIFIED) return item
-      const relative = path.relative(project, item.file)
-      return changed.has(item.file) || changed.has(relative) ? { ...item, status: STATUS.CHANGED } : item
-    })
-    const routineState = aggregateStatus(routines.map((item: any) => item.status))
-    // The tree is what the pane draws, so it has to be rebuilt from the
-    // session-adjusted statuses. Reusing `base.tree` here showed the last
-    // filesystem scan and no live edits at all.
-    const root = path.relative(project, base.routineRoot) || "."
-    // Same for the project directory: fold the session diff in so a file
+    // Fold the session diff into the project directory so a file
     // edited in this session shows as CHANGED even before the watcher fires.
     const projectFiles = base.project.files.map((item: any) => {
       const relative = path.relative(project, item.file)
@@ -362,8 +312,6 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
     const projectSummary = projectDirectoryTree(projectFiles)
     return {
       ...base,
-      routines,
-      tree: directoryTree(routines, { root }),
       project: {
         ...base.project,
         files: projectFiles,
@@ -373,14 +321,13 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
       },
       status: {
         ...base.status,
-        routines: routineState,
-        system: aggregateStatus([routineState, base.status.globals,
+        system: aggregateStatus([base.status.globals, base.status.proofs,
           aggregateStatus(projectFiles.map((item: any) => item.status))]),
       },
     }
   })
   const branch = () => props.api.state.vcs?.branch
-  const changedCount = () => current().project.changed + current().routines.filter((item: any) => item.status === STATUS.CHANGED).length
+  const changedCount = () => current().project.changed
 
   return (
     <box
@@ -399,7 +346,7 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
         <text fg={changedCount() ? skin().changed : skin().info}>{changedCount() ? `${changedCount()} EDITED` : "CLEAN"}</text>
       </box>
       <text fg={skin().muted} wrapMode="none">
-        {[branch(), countLabel(current().project.files.length + current().routines.length, "file"),
+        {[branch(), countLabel(current().project.files.length, "file"),
           current().references.sources.length ? countLabel(current().references.sources.length, "source") : ""]
           .filter(Boolean).join(" · ")}
       </text>
@@ -415,12 +362,11 @@ function HomeIdentity(props: { api: TuiPluginApi; snapshot: () => any; revision:
     return props.snapshot()
   })
   const summary = () => [
-    countLabel(current().project.files.length + current().routines.length, "file"),
+    countLabel(current().project.files.length, "file"),
     current().references.sources.length ? countLabel(current().references.sources.length, "reference source") : "",
     current().references.pending.length
       ? countLabel(current().references.pending.length, "reference needed", "references needed")
       : "",
-    current().routines.length ? countLabel(current().routines.length, "MUMPS routine") : "",
   ].filter(Boolean).join(" · ")
   return (
     <box
@@ -442,7 +388,6 @@ const tui: TuiPlugin = async (api) => {
   const [revision, setRevision] = createSignal(0)
   let snapshot = scanSystem({
     project,
-    corpus,
     explicitName: process.env.ROSETTA_SYSTEM_NAME || "",
   })
 
@@ -452,28 +397,19 @@ const tui: TuiPlugin = async (api) => {
     refreshTimer = setTimeout(() => {
       snapshot = scanSystem({
         project,
-        corpus,
         explicitName: process.env.ROSETTA_SYSTEM_NAME || "",
       })
       setRevision((value) => value + 1)
     }, 80)
   }
 
+  // OpenCode already owns project watching. Its events are enough to keep the
+  // panel current; a second recursive watcher and a polling loop only rescan.
   api.event.on("file.edited", (event) => refresh(normalizeEvent(event).file))
   api.event.on("file.watcher.updated", (event) => refresh(normalizeEvent(event).file))
 
-  const watchers: ReturnType<typeof watch>[] = []
-  try {
-    watchers.push(watch(project, { recursive: true }, (_event, file) => refresh(file ? path.join(project, String(file)) : project)))
-  } catch {
-    // The bounded refresh below covers filesystems without recursive watches.
-  }
-  const poll = setInterval(() => refresh(), 2500)
-  poll.unref?.()
   api.lifecycle.onDispose(() => {
     if (refreshTimer) clearTimeout(refreshTimer)
-    clearInterval(poll)
-    watchers.forEach((item) => item.close())
   })
 
   api.slots.register({
