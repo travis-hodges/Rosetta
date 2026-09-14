@@ -10,6 +10,7 @@ every command ends by printing the next one.
     rosetta                     open the Rosetta TUI in the current project
     rosetta status              what is wired, what is not, what to run next
     rosetta doctor              can this machine actually do the work
+    rosetta references add ...  attach language or platform documentation
     rosetta edit ROUTINE        change a routine with the verifier in the loop
     rosetta verify ROUTINE      check a change you already made
     rosetta model add ...       bring your own model
@@ -48,6 +49,7 @@ ROOT = REPO_ROOT  # compatibility for source-install callers
 # The workflows, ordered around the primary editor experience. The status command
 # prints this, and it is the same order used in docs/WORKFLOWS.md.
 WORKFLOWS: tuple[tuple[str, str, str], ...] = (
+    ("references", "Add language manuals and technical sources", "rosetta references status"),
     ("change", "Plan and apply an operational database change", "rosetta change --help"),
     ("db", "Inspect, preview, apply, and roll back database state", "rosetta db --help"),
     ("fileman", "Create or update validated VistA content", "rosetta fileman --help"),
@@ -137,7 +139,9 @@ def _config(project: Path | None = None) -> dict[str, Any]:
         profile = REPO_ROOT / ".opencode" / "agent" / f"{name}.md"
         prompt = profile.read_text(encoding="utf-8").split("---", 2)[-1].strip()
         config.setdefault("agent", {}).setdefault(name, {})["prompt"] = prompt
-    inventory = ", ".join(s.title for s in sources)
+    inventory = ", ".join(
+        f"{s.title} [{s.language}]" if s.language else s.title for s in sources
+    )
     if inventory:
         config["agent"]["rosetta-agent"]["prompt"] += (
             "\n\nAvailable repository references (use reference_sources for details): " + inventory
@@ -884,6 +888,67 @@ def cmd_model(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
+# Language and platform references
+# --------------------------------------------------------------------------
+
+def cmd_references(args: argparse.Namespace) -> int:
+    from rosetta.references import Catalog, add_reference, request_reference
+
+    project = args.project.expanduser().resolve()
+    try:
+        if args.references_cmd == "status":
+            inventory = Catalog(project).inventory()
+            if args.json:
+                print(json.dumps(inventory, indent=2))
+                return 0
+            state = inventory["state"]
+            print(f"Reference status: {state}")
+            if inventory["config"]:
+                print(f"Catalog: {inventory['config']}")
+            for source in inventory["sources"]:
+                language = f" [{source['language']}]" if source.get("language") else ""
+                print(f"  {source['id']}: {source['title']}{language} — {source['path']}")
+            for request in inventory["pending_requests"]:
+                reason = f" — {request['reason']}" if request["reason"] else ""
+                print(f"  needs {request['language']}{reason}")
+            if not inventory["sources"] and not inventory["pending_requests"]:
+                print("No language references are currently needed or configured.")
+            _next("rosetta references add PATH --language LANGUAGE --project .")
+            return 0
+
+        if args.references_cmd == "request":
+            path = request_reference(project, args.language, args.reason)
+            print(_yes(f"recorded missing {args.language} reference material"))
+            print(f"     {path}")
+            print("Ask the user to provide a local file/directory or authorize authoritative sourcing.")
+            _next(f"rosetta references add PATH --language {shlex.quote(args.language)} --project {shlex.quote(str(project))}")
+            return 0
+
+        if args.references_cmd == "add":
+            location, source = add_reference(
+                project,
+                args.path,
+                language=args.language,
+                source_id=args.id,
+                title=args.title,
+                kind=args.kind,
+                origin=args.origin,
+                tags=tuple(args.tags),
+                file_patterns=tuple(args.patterns),
+            )
+            print(_yes(f"added {source.title} ({source.id})"))
+            print(f"     catalog: {location}")
+            print(f"     source:  {source.path}")
+            print(f"     origin:  {source.origin}")
+            _next(f"rosetta references status --project {shlex.quote(str(project))}",
+                  "rosetta                         # reopen the TUI to refresh launch context")
+            return 0
+    except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
+        return _fail(str(exc))
+    return _fail(f"unknown references subcommand {args.references_cmd!r}")
+
+
+# --------------------------------------------------------------------------
 # Workflows 3 and 4 — delegation to the modules that already do the work
 # --------------------------------------------------------------------------
 
@@ -1152,6 +1217,26 @@ def build_parser() -> argparse.ArgumentParser:
             help="prompt time limit in seconds (default 300; requires --prompt)",
         )
 
+    p = sub.add_parser("references", help="add language manuals and technical sources")
+    rsub = p.add_subparsers(dest="references_cmd", required=True)
+    s = rsub.add_parser("status", help="show configured and requested reference material")
+    s.add_argument("--project", type=Path, default=Path.cwd(), help="target project (default: current directory)")
+    s.add_argument("--json", action="store_true", help="print the full source inventory")
+    r = rsub.add_parser("request", help="record that an unfamiliar language needs a source")
+    r.add_argument("language")
+    r.add_argument("--project", type=Path, default=Path.cwd(), help="target project (default: current directory)")
+    r.add_argument("--reason", default="", help="why the active task needs this material")
+    a = rsub.add_parser("add", help="import a local reference file or directory")
+    a.add_argument("path", type=Path, help="UTF-8 text file or directory to register")
+    a.add_argument("--language", required=True, help="language or platform this material documents")
+    a.add_argument("--project", type=Path, default=Path.cwd(), help="target project (default: current directory)")
+    a.add_argument("--id", default="", help="catalog source ID (default: language slug)")
+    a.add_argument("--title", default="", help="display title")
+    a.add_argument("--kind", default="user-provided", help="source type (default: user-provided)")
+    a.add_argument("--origin", default="user-provided", help="source URL or provenance label")
+    a.add_argument("--tag", dest="tags", action="append", default=[], help="retrieval tag; repeat as needed")
+    a.add_argument("--pattern", dest="patterns", action="append", default=[], help="relevant project-file glob; repeat as needed")
+
     def database_plan_args(parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--request", "-m", required=True,
                             help="the operational outcome in plain language")
@@ -1288,6 +1373,7 @@ _HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "code": cmd_tui,
     "status": cmd_status,
     "doctor": cmd_doctor,
+    "references": cmd_references,
     "change": cmd_change,
     "db": cmd_db,
     "fileman": cmd_fileman,

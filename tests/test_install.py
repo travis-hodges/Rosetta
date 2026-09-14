@@ -444,8 +444,11 @@ class ReleaseArtifactTests(unittest.TestCase):
                 f"{root}/opencode.json",
                 f"{root}/.opencode/instructions.md",
                 f"{root}/.opencode/tui.json",
+                f"{root}/.opencode/generic/tui.json",
+                f"{root}/.opencode/lib/rosetta-system-model.js",
                 f"{root}/.opencode/themes/rosetta.json",
                 f"{root}/.opencode/plugins/rosetta-experience.js",
+                f"{root}/.opencode/plugins/rosetta-system-map.tsx",
                 f"{root}/.opencode/agent/rosetta-agent.md",
                 f"{root}/.opencode/command/demo.md",
             }

@@ -5,6 +5,7 @@
     "title": "Internal Widget SDK v1",
     "path": "manual.md",
     "kind": "internal",
+    "language": "WidgetLang",
     "tags": ["widget", "SDK", "revision"],
     "file_patterns": ["*.widget", "*.js"],
     "priority": 10

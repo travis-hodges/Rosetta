@@ -6,6 +6,7 @@
       "title": "Payment ledger project contract",
       "path": "references/project.md",
       "kind": "repository",
+      "language": "MUMPS",
       "tags": [
         "payment",
         "receipt",
@@ -22,6 +23,7 @@
       "title": "YottaDB intrinsic functions",
       "path": "references/vendor/functions.md",
       "kind": "vendor",
+      "language": "MUMPS",
       "tags": [
         "MUMPS",
         "M",
@@ -39,6 +41,7 @@
       "title": "YottaDB language semantics",
       "path": "references/vendor/langfeat.md",
       "kind": "vendor",
+      "language": "MUMPS",
       "tags": [
         "MUMPS",
         "M",
@@ -56,6 +59,7 @@
       "title": "YottaDB commands and examples",
       "path": "references/vendor/commands.md",
       "kind": "vendor",
+      "language": "MUMPS",
       "tags": [
         "MUMPS",
         "M",
@@ -73,6 +77,7 @@
       "title": "YottaDB error processing",
       "path": "references/vendor/errproc.md",
       "kind": "vendor",
+      "language": "MUMPS",
       "tags": [
         "MUMPS",
         "M",

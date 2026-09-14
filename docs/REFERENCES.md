@@ -3,9 +3,11 @@
 Rosetta extends the installed OpenCode harness with four MCP tools:
 `reference_sources`, `reference_search`, `reference_read`, and `reference_examples`.
 Normal file inspection, editing, shell execution, permissions, conversations and
-tool-event rendering remain OpenCode's. There is no language classifier or mandatory
-lookup. The agent gets a short source inventory and general guidance to consult
-references when syntax, semantics, APIs or runtime behavior are uncertain.
+tool-event rendering remain OpenCode's. Rosetta does not classify every repository or
+force a lookup. The agent assesses whether the requested work actually depends on a
+language, runtime, or platform it cannot handle reliably, then inspects the local source
+inventory before editing. Familiar-language work and tasks supported by repository
+evidence continue without an onboarding prompt.
 
 ## Install and launch
 
@@ -30,9 +32,38 @@ The source checkout must remain at its installed location. If an existing launch
 already occupies the destination, the installer refuses to overwrite it. Use the
 checkout's `./bin/rosetta` directly or choose a different bin directory.
 
-## Attach your own manual
+## Add language material
 
-Put `rosetta.json` in your repository root:
+The easiest path is the import command:
+
+```sh
+rosetta references add /path/to/manual.md --language JOVIAL --project .
+rosetta references add /path/to/cms2-docs --language CMS-2 --project . \
+  --title 'CMS-2 reference set'
+rosetta references status --project .
+```
+
+`add` accepts a UTF-8 `.md`, `.txt`, or `.rst` file, or a directory containing those
+formats. Material already inside the project is registered in place. Material supplied
+from an attachment or another directory is copied under `references/uploaded/`, so the
+catalog does not depend on a temporary upload path. The command creates `rosetta.json`
+when needed, preserves its existing instructions and commands, rejects duplicate source
+IDs, records the language and origin, and runs the real catalog index before reporting
+success. If validation fails, the manifest and copied material are rolled back.
+
+Use repeated `--tag` and `--pattern` options when they improve retrieval, and `--id`,
+`--title`, or `--kind` when their defaults are too general. User-supplied material gets
+the provenance value `user-provided` unless `--origin` is supplied. For material sourced
+from the web, `--origin` should be the exact official vendor, standards-body, or primary
+maintainer URL. Rosetta itself does not fabricate or infer a source URL.
+
+When an active task needs an unfamiliar language and the catalog is inadequate, the
+agent records the need locally and asks one question: provide a local file/directory, or
+authorize Rosetta to find authoritative documentation. It does not browse or download
+until the user chooses the second path. A pending need appears in the TUI's References
+section and is cleared when material for that language is added.
+
+You can still write the manifest by hand. Put `rosetta.json` in your repository root:
 
 ```json
 {
@@ -43,6 +74,7 @@ Put `rosetta.json` in your repository root:
       "title": "Internal API reference",
       "path": "docs/internal-api.md",
       "kind": "internal",
+      "language": "WidgetLang",
       "tags": ["widgets", "revision"],
       "file_patterns": ["*.widget", "src/*.js"],
       "priority": 10
@@ -55,8 +87,8 @@ Put `rosetta.json` in your repository root:
 No Rosetta code changes are needed. `path` may name a local UTF-8 file or a directory
 of `.md`, `.txt` and `.rst` files. Explicit absolute paths are also supported. A directory
 source does not follow symlinks outside its registered directory. `origin` can hold a
-vendor URL for provenance; retrieval never fetches that URL. `kind` and `tags` are
-metadata, not language dispatch. A source with `kind: "examples"` treats all its
+vendor URL for provenance; retrieval never fetches that URL. `language`, `kind`, and
+`tags` are metadata, not language dispatch. A source with `kind: "examples"` treats all its
 passages as examples; fenced code is also discoverable through `reference_examples`.
 
 Configuration discovery walks upward from the active directory to the nearest catalog,

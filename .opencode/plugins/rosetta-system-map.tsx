@@ -9,15 +9,12 @@ import {
   aggregateStatus,
   directoryTree,
   normalizeEvent,
+  projectDirectoryTree,
   scanSystem,
 } from "../lib/rosetta-system-model.js"
 
 const project = path.resolve(process.env.ROSETTA_PROJECT_DIR || process.cwd())
 const corpus = path.resolve(process.env.ROSETTA_CORPUS_DIR || project)
-const runtime = process.env.ROSETTA_RUNTIME || "YottaDB"
-const container = process.env.ROSETTA_CONTAINER || "rosetta-verify"
-const instance = process.env.ROSETTA_INSTANCE || "vehu"
-const language = process.env.ROSETTA_SYSTEM_LANGUAGE || "MUMPS"
 
 const colors = (api: TuiPluginApi) => {
   const theme = api.theme.current
@@ -41,44 +38,20 @@ const statusLabel = (status: string) => {
 }
 
 const statusGlyph = (status: string) => status === STATUS.CHANGED ? "●" : status === STATUS.VERIFIED ? "◆" : "○"
+const countLabel = (count: number, singular: string, plural = `${singular}s`) => `${count} ${count === 1 ? singular : plural}`
 
-function Node(props: { api: TuiPluginApi; label: string; status: string }) {
+function Row(props: { api: TuiPluginApi; status?: string; label: string; note?: string; glyph?: string }) {
   const skin = () => colors(props.api)
-  const tone = () => skin()[props.status as "idle" | "changed" | "verified"] || skin().muted
-  return (
-    <box border borderColor={tone()} flexGrow={1} flexShrink={1} minWidth={0} alignItems="center">
-      <text fg={tone()} wrapMode="none"><b>{props.label}</b></text>
-    </box>
-  )
-}
-
-// Two 17-column boxes plus a joiner do not fit a ~34-column sidebar, and the
-// overflow tore the panel's own right border, so flex shares the row instead of
-// asserting a width. The identity box that used to sit above these two is gone:
-// it repeated the panel header for four of the pane's two dozen rows, and those
-// rows are the directory listing.
-function Topology(props: { api: TuiPluginApi; snapshot: any }) {
-  return (
-    <box flexDirection="row" flexShrink={0}>
-      <Node api={props.api} label="ROUTINES" status={props.snapshot.status.routines} />
-      <Node api={props.api} label="GLOBALS" status={props.snapshot.status.globals} />
-    </box>
-  )
-}
-
-// The layout, not a file list. `directoryTree` has already collapsed the
-// untouched bulk into a count per directory, so every section below -- the
-// routines, the persistent changes, the snapshots and the proofs -- stays on
-// screen at the same time. A section with nothing in it still shows its row,
-// because "no persistent changes yet" is information about the system.
-function Row(props: { api: TuiPluginApi; status: string; label: string; note?: string }) {
-  const skin = () => colors(props.api)
-  const tone = () => skin()[props.status as "idle" | "changed" | "verified"] || skin().muted
+  const tone = () => props.status
+    ? (skin()[props.status as "idle" | "changed" | "verified"] || skin().muted)
+    : skin().muted
   return (
     <box flexDirection="row" justifyContent="space-between">
-      <text fg={tone()} wrapMode="none">  {statusGlyph(props.status)} {props.label}</text>
+      <box flexGrow={1} flexShrink={1} minWidth={0}>
+        <text fg={tone()} wrapMode="none">  {props.glyph || (props.status ? statusGlyph(props.status) : "·")} {props.label}</text>
+      </box>
       <Show when={props.note}>
-        <text fg={tone()} wrapMode="none">{props.note}</text>
+        <text fg={tone()} wrapMode="none" flexShrink={0}> {props.note}</text>
       </Show>
     </box>
   )
@@ -91,19 +64,110 @@ function Section(props: { api: TuiPluginApi; label: string; count: number; statu
     : skin().muted
   return (
     <box flexDirection="row" justifyContent="space-between">
-      <text fg={skin().muted} wrapMode="none">▼ {props.label}</text>
-      <text fg={tone()} wrapMode="none">{props.count}</text>
+      <box flexGrow={1} flexShrink={1} minWidth={0}>
+        <text fg={skin().muted} wrapMode="none">▼ {props.label}</text>
+      </box>
+      <text fg={tone()} wrapMode="none" flexShrink={0}> {props.count}</text>
     </box>
   )
 }
 
-function Directory(props: { api: TuiPluginApi; snapshot: any }) {
+const fileNote = (item: any) => {
+  if (item.additions || item.deletions) return `+${item.additions || 0} -${item.deletions || 0}`
+  return item.change || ""
+}
+
+function ProjectDirectory(props: { api: TuiPluginApi; snapshot: any }) {
   const skin = () => colors(props.api)
   return (
-    <box flexDirection="column" flexGrow={1} flexShrink={1}>
-      <text fg={skin().text} flexShrink={0}><b>SYSTEM DIRECTORY</b></text>
+    <box flexDirection="column" flexShrink={0}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={skin().text}><b>PROJECT</b></text>
+        <text fg={props.snapshot.project.changed ? skin().changed : skin().muted}>
+          {countLabel(props.snapshot.project.files.length, "file")}
+        </text>
+      </box>
+      <For each={props.snapshot.project.tree}>
+        {(dir: any) => (
+          <box flexDirection="column" flexShrink={0}>
+            <Section api={props.api} label={dir.label} count={dir.count} status={dir.status} />
+            <For each={dir.children}>
+              {(item: any) => (
+                <Row
+                  api={props.api}
+                  status={item.status}
+                  label={item.name}
+                  glyph={item.status === STATUS.CHANGED ? "●" : "·"}
+                  note={fileNote(item)}
+                />
+              )}
+            </For>
+            <Show when={dir.hidden > 0}>
+              <text fg={skin().muted} wrapMode="none">    {dir.hidden} more</text>
+            </Show>
+          </box>
+        )}
+      </For>
+      <Show when={props.snapshot.project.hiddenDirectories > 0}>
+        <text fg={skin().muted} wrapMode="none">  + {props.snapshot.project.hiddenDirectories} more directories</text>
+      </Show>
+      <Show when={props.snapshot.project.files.length === 0}>
+        <text fg={skin().muted}>  No project files</text>
+      </Show>
+    </box>
+  )
+}
 
-      <box flexDirection="column" flexShrink={1} overflow="hidden">
+function References(props: { api: TuiPluginApi; snapshot: any }) {
+  const skin = () => colors(props.api)
+  const references = () => props.snapshot.references
+  return (
+    <Show when={references().config || references().error || references().pending.length}>
+      <box flexDirection="column" flexShrink={0}>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={skin().text}><b>REFERENCES</b></text>
+          <text fg={references().error || references().pending.length ? skin().changed : skin().muted}>
+            {references().pending.length ? `${references().pending.length} NEEDED` : references().sources.length}
+          </text>
+        </box>
+        <Show when={references().error}>
+          <Row api={props.api} status={STATUS.CHANGED} label="invalid reference configuration" glyph="!" />
+        </Show>
+        <For each={references().pending}>
+          {(request: any) => (
+            <Row api={props.api} status={STATUS.CHANGED} glyph="!" label={request.language}
+                 note={request.reason || "source needed"} />
+          )}
+        </For>
+        <For each={references().sources.slice(0, 5)}>
+          {(source: any) => (
+            <Row api={props.api} status={source.available ? STATUS.IDLE : STATUS.CHANGED}
+                 glyph={source.available ? "·" : "!"} label={source.title}
+                 note={source.available ? source.language : "missing"} />
+          )}
+        </For>
+        <Show when={references().sources.length > 5}>
+          <text fg={skin().muted}>    {references().sources.length - 5} more sources</text>
+        </Show>
+        <For each={references().commands.slice(0, 3)}>
+          {(command: any) => <Row api={props.api} label={`${command.name}: ${command.command}`} glyph="$" />}
+        </For>
+      </box>
+    </Show>
+  )
+}
+
+function MumpsRoutines(props: { api: TuiPluginApi; snapshot: any }) {
+  const skin = () => colors(props.api)
+  return (
+    <Show when={props.snapshot.routines.length > 0}>
+      <box flexDirection="column" flexShrink={0}>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={skin().text}><b>MUMPS ROUTINES</b></text>
+          <text fg={skin()[props.snapshot.status.routines as "idle" | "changed" | "verified"] || skin().muted}>
+            {props.snapshot.routines.length}
+          </text>
+        </box>
       <For each={props.snapshot.tree}>
         {(dir: any) => (
           <box flexDirection="column" flexShrink={0}>
@@ -119,41 +183,58 @@ function Directory(props: { api: TuiPluginApi; snapshot: any }) {
               )}
             </For>
             <Show when={dir.hidden > 0}>
-              <text fg={skin().muted} wrapMode="none">  ○ {dir.hidden} unchanged</text>
+              <text fg={skin().muted} wrapMode="none">    {dir.hidden} clean</text>
             </Show>
           </box>
         )}
       </For>
       </box>
+    </Show>
+  )
+}
 
-      <Section api={props.api} label="globals/" count={props.snapshot.changes.length}
-               status={props.snapshot.status.globals} />
-      <Show when={props.snapshot.changes.length === 0}>
-        <text fg={skin().muted} wrapMode="none">  ○ no persistent changes</text>
-      </Show>
-      <For each={props.snapshot.changes}>
-        {(item: any) => (
-          <Row api={props.api} status={item.status} label={item._name} note={statusLabel(item.status)} />
-        )}
-      </For>
+function Verification(props: { api: TuiPluginApi; snapshot: any }) {
+  const skin = () => colors(props.api)
+  const visible = () => props.snapshot.changes.length > 0 || props.snapshot.proofs.length > 0
+  return (
+    <Show when={visible()}>
+      <box flexDirection="column" flexShrink={0}>
+        <text fg={skin().text}><b>VERIFICATION</b></text>
+        <Show when={props.snapshot.changes.length > 0}>
+          <Section api={props.api} label="database changes" count={props.snapshot.changes.length}
+                   status={props.snapshot.status.globals} />
+          <For each={props.snapshot.changes.slice(-4).reverse()}>
+            {(item: any) => (
+              <Row api={props.api} status={item.status} label={item._name} note={statusLabel(item.status)} />
+            )}
+          </For>
+        </Show>
+        <Show when={props.snapshot.proofs.length > 0}>
+          <Section api={props.api} label="routine proofs" count={props.snapshot.proofs.length}
+                   status={props.snapshot.status.proofs} />
+          <For each={props.snapshot.recentProofs}>
+            {(item: any) => (
+              <Row api={props.api} status={item.equivalent === true ? STATUS.VERIFIED : STATUS.CHANGED}
+                   label={item.routine} note={item.equivalent === true ? "MATCH" : "DIVERGED"} />
+            )}
+          </For>
+        </Show>
+      </box>
+    </Show>
+  )
+}
 
-      <Section api={props.api} label="snapshots/" count={props.snapshot.snapshots.length} />
-      <For each={props.snapshot.snapshots}>
-        {(item: any) => (
-          <Row api={props.api} status={STATUS.VERIFIED}
-               label={String(item.snapshot_id).split(/[\\/]/).at(-1)} />
-        )}
-      </For>
-
-      <Section api={props.api} label="proofs/" count={props.snapshot.proofs.length}
-               status={props.snapshot.status.proofs} />
-      <For each={props.snapshot.recentProofs}>
-        {(item: any) => (
-          <Row api={props.api} status={item.equivalent === true ? STATUS.VERIFIED : STATUS.CHANGED}
-               label={item.routine} note={item.equivalent === true ? "CLEAN" : "DIVERGED"} />
-        )}
-      </For>
-    </box>
+function Directory(props: { api: TuiPluginApi; snapshot: any }) {
+  return (
+    <scrollbox flexGrow={1} flexShrink={1} minHeight={0}
+               verticalScrollbarOptions={{ visible: true }}>
+      <box flexDirection="column" flexShrink={0}>
+        <ProjectDirectory api={props.api} snapshot={props.snapshot} />
+        <References api={props.api} snapshot={props.snapshot} />
+        <MumpsRoutines api={props.api} snapshot={props.snapshot} />
+        <Verification api={props.api} snapshot={props.snapshot} />
+      </box>
+    </scrollbox>
   )
 }
 
@@ -163,6 +244,10 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
     props.revision()
     const diff = props.api.state.session.diff(props.session_id)
     const changed = new Set(diff.flatMap((item) => [item.file, path.resolve(project, item.file)]))
+    const diffByFile = new Map(diff.flatMap((item) => [
+      [item.file, item],
+      [path.resolve(project, item.file), item],
+    ]))
     const base = props.snapshot()
     const routines = base.routines.map((item: any) => {
       if (item.status === STATUS.VERIFIED) return item
@@ -173,18 +258,38 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
     // The tree is what the pane draws, so it has to be rebuilt from the
     // session-adjusted statuses. Reusing `base.tree` here showed the last
     // filesystem scan and no live edits at all.
-    const root = path.relative(project, base.routineRoot) || base.routineRoot
+    const root = path.relative(project, base.routineRoot) || "."
+    // Same for the project directory: fold the session diff in so a file
+    // edited in this session shows as CHANGED even before the watcher fires.
+    const projectFiles = base.project.files.map((item: any) => {
+      const relative = path.relative(project, item.file)
+      const sessionChange = diffByFile.get(item.file) || diffByFile.get(relative)
+      return changed.has(item.file) || changed.has(relative)
+        ? { ...item, status: STATUS.CHANGED, change: "edited", additions: sessionChange?.additions, deletions: sessionChange?.deletions }
+        : item
+    })
+    const projectSummary = projectDirectoryTree(projectFiles)
     return {
       ...base,
       routines,
       tree: directoryTree(routines, { root }),
+      project: {
+        ...base.project,
+        files: projectFiles,
+        ...projectSummary,
+        changed: projectFiles.filter((item: any) => item.status === STATUS.CHANGED).length,
+        status: aggregateStatus(projectFiles.map((item: any) => item.status)),
+      },
       status: {
         ...base.status,
         routines: routineState,
-        system: aggregateStatus([routineState, base.status.globals]),
+        system: aggregateStatus([routineState, base.status.globals,
+          aggregateStatus(projectFiles.map((item: any) => item.status))]),
       },
     }
   })
+  const branch = () => props.api.state.vcs?.branch
+  const changedCount = () => current().project.changed + current().routines.filter((item: any) => item.status === STATUS.CHANGED).length
 
   return (
     <box
@@ -198,17 +303,15 @@ function SystemPanel(props: { api: TuiPluginApi; session_id: string; revision: (
       <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
         <text fg={skin()[current().status.system as "idle" | "changed" | "verified"] || skin().accent}
               wrapMode="none">
-          <b>{statusGlyph(current().status.system)} {current().identity.toUpperCase()} SYSTEM</b>
+          <b>{current().projectName.toUpperCase()}</b>
         </text>
-        <text fg={skin().info}>LIVE</text>
+        <text fg={changedCount() ? skin().changed : skin().info}>{changedCount() ? `${changedCount()} EDITED` : "CLEAN"}</text>
       </box>
-      <text fg={skin().muted} wrapMode="none">{language} · {runtime} · {instance}</text>
-      <Topology api={props.api} snapshot={current()} />
-      <box flexDirection="row" gap={2} flexShrink={0}>
-        <text fg={skin().changed}>● edited</text>
-        <text fg={skin().verified}>◆ verified</text>
-        <text fg={skin().muted}>○ clean</text>
-      </box>
+      <text fg={skin().muted} wrapMode="none">
+        {[branch(), countLabel(current().project.files.length + current().routines.length, "file"),
+          current().references.sources.length ? countLabel(current().references.sources.length, "source") : ""]
+          .filter(Boolean).join(" · ")}
+      </text>
       <Directory api={props.api} snapshot={current()} />
     </box>
   )
@@ -220,45 +323,46 @@ function HomeIdentity(props: { api: TuiPluginApi; snapshot: () => any; revision:
     props.revision()
     return props.snapshot()
   })
+  const summary = () => [
+    countLabel(current().project.files.length + current().routines.length, "file"),
+    current().references.sources.length ? countLabel(current().references.sources.length, "reference source") : "",
+    current().references.pending.length
+      ? countLabel(current().references.pending.length, "reference needed", "references needed")
+      : "",
+    current().routines.length ? countLabel(current().routines.length, "MUMPS routine") : "",
+  ].filter(Boolean).join(" · ")
   return (
     <box
       border
       borderColor={skin().border}
       paddingLeft={2}
       paddingRight={2}
-      paddingTop={1}
-      paddingBottom={1}
       flexDirection="column"
     >
-      <text fg={skin().accent}><b>{current().identity.toUpperCase()} SYSTEM</b></text>
-      <text fg={skin().muted}>{language} · {runtime} · {current().routines.length} routines · {container}/{instance}</text>
+      <text fg={skin().accent} wrapMode="none" truncate>
+        <b>{current().projectName.toUpperCase()}</b>
+        <span style={{ fg: skin().muted }}> · {summary()}</span>
+      </text>
     </box>
   )
 }
 
 const tui: TuiPlugin = async (api) => {
-  const touched = new Set<string>()
   const [revision, setRevision] = createSignal(0)
   let snapshot = scanSystem({
     project,
     corpus,
     explicitName: process.env.ROSETTA_SYSTEM_NAME || "",
-    modifiedFiles: touched,
   })
 
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
-  const refresh = (file?: string) => {
-    if (file) {
-      touched.add(file)
-      touched.add(path.resolve(project, file))
-    }
+  const refresh = (_file?: string) => {
     if (refreshTimer) clearTimeout(refreshTimer)
     refreshTimer = setTimeout(() => {
       snapshot = scanSystem({
         project,
         corpus,
         explicitName: process.env.ROSETTA_SYSTEM_NAME || "",
-        modifiedFiles: touched,
       })
       setRevision((value) => value + 1)
     }, 80)
@@ -268,14 +372,12 @@ const tui: TuiPlugin = async (api) => {
   api.event.on("file.watcher.updated", (event) => refresh(normalizeEvent(event).file))
 
   const watchers: ReturnType<typeof watch>[] = []
-  for (const root of new Set([snapshot.routineRoot, path.join(project, ".rosetta")])) {
-    try {
-      watchers.push(watch(root, { recursive: true }, (_event, file) => refresh(file ? path.join(root, String(file)) : root)))
-    } catch {
-      // Missing artifact directories are picked up by the bounded refresh below.
-    }
+  try {
+    watchers.push(watch(project, { recursive: true }, (_event, file) => refresh(file ? path.join(project, String(file)) : project)))
+  } catch {
+    // The bounded refresh below covers filesystems without recursive watches.
   }
-  const poll = setInterval(() => refresh(), 1200)
+  const poll = setInterval(() => refresh(), 2500)
   poll.unref?.()
   api.lifecycle.onDispose(() => {
     if (refreshTimer) clearTimeout(refreshTimer)

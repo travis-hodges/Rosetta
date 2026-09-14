@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,8 +18,14 @@ import {
   inferIdentity,
   newestBy,
   normalizeEvent,
+  projectDirectoryTree,
+  projectFileStatus,
+  referenceSummary,
+  resolveRoutineRoot,
   routineStatus,
+  scanProjectDirectory,
   scanSystem,
+  walkProject,
 } from '../.opencode/lib/rosetta-system-model.js';
 
 const wait = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -55,17 +62,22 @@ test('reference toasts describe only actual tool calls', async () => {
   assert.equal(hooks.tool, undefined, 'no canned success tool in the generic agent');
 });
 
-test('the TUI declares the VA system map plugin', async () => {
+test('the shipped and generic TUI presets both declare the live project map', async () => {
   const config = JSON.parse(await readFile(new URL('../.opencode/tui.json', import.meta.url), 'utf8'));
   assert.deepEqual(config.plugin, ['./plugins/rosetta-system-map.tsx']);
+  const generic = JSON.parse(await readFile(new URL('../.opencode/generic/tui.json', import.meta.url), 'utf8'));
+  assert.deepEqual(generic.plugin, ['../plugins/rosetta-system-map.tsx']);
 
   const source = await readFile(new URL('../.opencode/plugins/rosetta-system-map.tsx', import.meta.url), 'utf8');
-  assert.match(source, /identity\.toUpperCase\(\).*SYSTEM/);
   assert.match(source, /sidebar_content/);
-  assert.match(source, /SYSTEM DIRECTORY/);
+  assert.match(source, /PROJECT/);
+  assert.match(source, /REFERENCES/);
+  assert.match(source, /MUMPS ROUTINES/);
   assert.match(source, /file\.watcher\.updated/);
   assert.match(source, /edited/);
   assert.match(source, /verified/);
+  assert.doesNotMatch(source, /ROSETTA_RUNTIME \|\| "YottaDB"/);
+  assert.doesNotMatch(source, /ROSETTA_SYSTEM_LANGUAGE \|\| "MUMPS"/);
 
   // `colors()` returns changed/verified. Reading theme names off it -- error,
   // success -- silently drew the two swatches that carry the panel's meaning
@@ -224,4 +236,139 @@ test('system map status and events preserve edited-over-verified priority', () =
     { routine: 'A', created_at: '2026-01-01' },
     { routine: 'A', created_at: '2026-01-02' },
   ], item => item.routine).get('A').created_at, '2026-01-02');
+});
+
+test('project directory scan walks the working tree and ignores build noise', async () => {
+  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-project-'));
+  await mkdir(path.join(project, 'src'), { recursive: true });
+  await mkdir(path.join(project, 'node_modules'), { recursive: true });
+  await mkdir(path.join(project, '.git'), { recursive: true });
+  await writeFile(path.join(project, 'README.md'), '# hi\n');
+  await writeFile(path.join(project, 'src', 'main.js'), 'console.log(1)\n');
+  await writeFile(path.join(project, 'node_modules', 'dep.js'), 'x\n');
+  await writeFile(path.join(project, '.git', 'config'), 'x\n');
+
+  const view = scanProjectDirectory({ project });
+  const names = view.files.map(item => item.relative).sort();
+  assert.deepEqual(names, ['README.md', 'src/main.js']);
+  assert.equal(view.status, STATUS.IDLE);
+  assert.equal(view.tree.length, 2);
+});
+
+test('project directory marks edited files as CHANGED and rolls up the tree', async () => {
+  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-project-edit-'));
+  await mkdir(path.join(project, 'src'), { recursive: true });
+  await writeFile(path.join(project, 'README.md'), '# hi\n');
+  await writeFile(path.join(project, 'src', 'main.js'), 'console.log(1)\n');
+
+  const modified = new Set([path.join(project, 'src', 'main.js')]);
+  const view = scanProjectDirectory({ project, modifiedFiles: modified });
+  assert.equal(view.status, STATUS.CHANGED);
+  const src = view.tree.find(dir => dir.label === 'src/');
+  assert.ok(src, 'src/ directory row missing');
+  assert.equal(src.status, STATUS.CHANGED);
+  assert.deepEqual(src.children.map(item => item.name), ['main.js']);
+  assert.equal(src.children[0].status, STATUS.CHANGED);
+});
+
+test('projectFileStatus is CHANGED only when modified', () => {
+  assert.equal(projectFileStatus({}, false), STATUS.IDLE);
+  assert.equal(projectFileStatus({}, true), STATUS.CHANGED);
+});
+
+test('scanSystem exposes the project directory alongside the routine corpus', async () => {
+  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-scan-project-'));
+  const routines = path.join(project, 'data', 'routines');
+  await mkdir(routines, { recursive: true });
+  await writeFile(path.join(routines, 'A.m'), 'A\n Q\n');
+  await writeFile(path.join(project, 'README.md'), '# hi\n');
+
+  const view = scanSystem({ project, corpus: project });
+  assert.ok(view.project, 'project view missing from scanSystem');
+  assert.ok(view.project.files.some(item => item.relative === 'README.md'));
+  assert.ok(view.project.files.every(item => item.relative !== 'data/routines/A.m'),
+    'the routine corpus should be excluded from the project tree');
+});
+
+test('a top-level routines directory is the MUMPS root and never exposes an absolute heading', async () => {
+  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-direct-routines-'));
+  const routines = path.join(project, 'routines');
+  await mkdir(routines, { recursive: true });
+  await writeFile(path.join(routines, 'A.m'), 'A\n Q\n');
+
+  assert.equal(resolveRoutineRoot(project, project), routines);
+  const view = scanSystem({ project, corpus: project });
+  assert.equal(view.tree[0].label, 'routines/');
+  assert.ok(!view.tree[0].label.includes(project));
+});
+
+test('project directory summaries are globally bounded and put edited files first', () => {
+  const files = Array.from({ length: 30 }, (_, index) => ({
+    file: `/project/dir-${index}/file-${index}.ts`,
+    relative: `dir-${index}/file-${index}.ts`,
+    name: `file-${index}.ts`,
+    status: index === 29 ? STATUS.CHANGED : STATUS.IDLE,
+    change: index === 29 ? 'edited' : '',
+  }));
+  const view = projectDirectoryTree(files, { directoryBudget: 5, fileBudget: 4, perDirectory: 2 });
+  assert.equal(view.tree.length, 5);
+  assert.equal(view.hiddenDirectories, 25);
+  assert.equal(view.tree.flatMap(directory => directory.children).length, 4);
+  assert.equal(view.tree[0].children[0].name, 'file-29.ts');
+  assert.equal(view.tree[0].status, STATUS.CHANGED);
+});
+
+test('project directory rows prefer working files over licenses and lock files', () => {
+  const files = ['project.md', 'vendor-manifest.json', 'LICENSE-YottaDB.txt', 'package-lock.json'].map(name => ({
+    file: `/project/references/${name}`,
+    relative: `references/${name}`,
+    name,
+    status: STATUS.IDLE,
+    change: '',
+  }));
+  const [references] = projectDirectoryTree(files, { fileBudget: 4, perDirectory: 4 }).tree;
+  assert.deepEqual(references.children.map(item => item.name), ['project.md', 'vendor-manifest.json']);
+  assert.equal(references.hidden, 2);
+});
+
+test('Git-backed directory scans show changes that predate the TUI session', async () => {
+  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-git-project-'));
+  execFileSync('git', ['init', '-q'], { cwd: project });
+  await mkdir(path.join(project, 'src'), { recursive: true });
+  await writeFile(path.join(project, 'src', 'main.js'), 'before\n');
+  execFileSync('git', ['add', 'src/main.js'], { cwd: project });
+  await writeFile(path.join(project, 'src', 'main.js'), 'after\n');
+  await writeFile(path.join(project, 'src', 'new.js'), 'new\n');
+
+  const view = scanProjectDirectory({ project });
+  assert.equal(view.changed, 2);
+  assert.equal(view.files.find(item => item.relative === 'src/main.js').change, 'edited');
+  assert.equal(view.files.find(item => item.relative === 'src/new.js').change, 'new');
+});
+
+test('reference summary reports only repository-declared sources and commands', async () => {
+  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-reference-panel-'));
+  await writeFile(path.join(project, 'manual.md'), '# Local manual\n');
+  await writeFile(path.join(project, 'rosetta.json'), JSON.stringify({
+    version: 1,
+    sources: [{ id: 'local', title: 'Local manual', path: 'manual.md', kind: 'internal' }],
+    commands: { test: ['npm', 'test'] },
+  }));
+  const summary = referenceSummary(project);
+  assert.deepEqual(summary.sources, [{ id: 'local', title: 'Local manual', kind: 'internal', language: '', available: true }]);
+  assert.deepEqual(summary.commands, [{ name: 'test', command: 'npm test' }]);
+});
+
+test('reference summary exposes only an active missing-language request', async () => {
+  const project = await mkdtemp(path.join(tmpdir(), 'rosetta-reference-needed-'));
+  await mkdir(path.join(project, '.git'));
+  await mkdir(path.join(project, '.rosetta'));
+  await writeFile(path.join(project, '.rosetta', 'reference-requests.json'), JSON.stringify({
+    version: 1,
+    requests: [{ language: 'JOVIAL', reason: 'task edits a procedure' }],
+  }));
+  const summary = referenceSummary(project);
+  assert.equal(summary.config, '');
+  assert.deepEqual(summary.pending, [{ language: 'JOVIAL', reason: 'task edits a procedure' }]);
+  assert.equal(summary.error, '');
 });

@@ -9,6 +9,13 @@ consult when its existing knowledge is uncertain. The core reference abstraction
 `ReferenceSource`: a local document or collection with provenance and cheap relevance
 metadata. It works for language manuals, internal DSLs, SDKs and APIs without new agent
 branches. Retrieval is incremental and optional, alongside ordinary inspect/edit/run tools.
+When a requested change truly depends on a language or platform the active model cannot
+handle reliably, Rosetta checks this inventory before editing. If adequate material is
+missing, it asks the user to provide local documentation or authorize authoritative
+sourcing. `rosetta references add` creates or extends the repository catalog, keeps source
+provenance, validates the imported material, and clears the TUI's pending-source state.
+This decision is task-driven; Rosetta does not interrupt familiar-language work or claim
+that a file extension alone proves the model needs help.
 
 MUMPS/YottaDB is the first real coding demo, configured entirely in `examples/payments`.
 Its runtime uses the existing verifier; the generic reference service does not contain a

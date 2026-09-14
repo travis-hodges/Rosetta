@@ -5,10 +5,10 @@ adds repository-provided technical references to OpenCode so the agent can look 
 missing knowledge, edit real software, and check the result against its runtime.
 
 - Four real tools: source inventory, search, incremental reading, and examples.
-- Local `rosetta.json` configuration for manuals, SDKs, APIs and internal documentation.
+- One-command import into local `rosetta.json` for manuals, SDKs, APIs and internal documentation.
 - Deterministic lexical retrieval with source, heading, line and hash provenance.
 - Real MUMPS payment demo with YottaDB execution and output/database checks.
-- No new package dependencies or mandatory language-detection step.
+- A guarded onboarding prompt when a task truly needs an unfamiliar language source.
 
 [Setup, configuration and demo commands](docs/REFERENCES.md).
 
@@ -53,7 +53,17 @@ untested external side effects.
 
 ## Add your own knowledge
 
-Register a local manual in `rosetta.json`; no central agent changes are needed.
+Attach or point Rosetta to a UTF-8 Markdown, text, or reStructuredText file or directory:
+
+```sh
+rosetta references add /path/to/manuals --language MUMPS --project . \
+  --origin 'https://docs.yottadb.com/ProgrammersGuide/'
+```
+
+Rosetta creates or updates `rosetta.json`, imports material from outside the project,
+and validates retrieval before reporting success. If a task needs an unfamiliar language
+and no adequate source exists, the agent asks whether you want to provide the material or
+authorize it to find primary documentation.
 [Configuration and retrieval guide](docs/REFERENCES.md) ·
 [Non-MUMPS registration example](examples/widget-sdk/rosetta.json).
 

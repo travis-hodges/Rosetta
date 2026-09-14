@@ -8,7 +8,15 @@ import tempfile
 import unittest
 
 from rosetta import cli
-from rosetta.references import Catalog, ReferenceRegistry, configuration, discover
+from rosetta.references import (
+    Catalog,
+    ReferenceRegistry,
+    add_reference,
+    configuration,
+    discover,
+    pending_requests,
+    request_reference,
+)
 from rosetta.tools.tools import ToolError
 
 
@@ -62,6 +70,74 @@ class ReferencesTests(unittest.TestCase):
         self.assertEqual(set(config['mcp']), {'references'})
         self.assertNotIn('MUMPS', json.dumps(config))
         self.assertNotIn('VistA', json.dumps(config))
+
+    def test_missing_language_request_is_visible_and_cleared_after_import(self):
+        (self.root / 'rosetta.json').chmod(0o640)
+        state = request_reference(self.root, 'JOVIAL', 'editing a flight-control module')
+        self.assertTrue(state.is_file())
+        inventory = Catalog(self.root).inventory()
+        self.assertEqual(inventory['state'], 'needs-source')
+        self.assertEqual(inventory['pending_requests'], [{
+            'language': 'JOVIAL', 'reason': 'editing a flight-control module',
+        }])
+
+        with tempfile.TemporaryDirectory() as upload:
+            manual = Path(upload) / 'jovial-manual.md'
+            manual.write_text('# JOVIAL procedures\n\nDEFINE declares a procedure.\n', encoding='utf-8')
+            location, source = add_reference(
+                self.root, manual, language='JOVIAL', origin='https://standards.example/jovial',
+                file_patterns=('*.jov',),
+            )
+
+        self.assertEqual(location, self.root / 'rosetta.json')
+        self.assertEqual(source.id, 'jovial')
+        self.assertEqual(source.language, 'JOVIAL')
+        self.assertEqual(source.origin, 'https://standards.example/jovial')
+        self.assertTrue((self.root / source.path).is_file())
+        self.assertEqual(pending_requests(self.root), [])
+        self.assertEqual(Catalog(self.root).inventory()['state'], 'ready')
+        self.assertEqual(Catalog(self.root).search('DEFINE procedure')['results'][0]['source_id'], 'jovial')
+        saved = json.loads((self.root / 'rosetta.json').read_text(encoding='utf-8'))
+        self.assertEqual(saved['commands'], self.config['commands'])
+        self.assertEqual((self.root / 'rosetta.json').stat().st_mode & 0o777, 0o640)
+
+    def test_add_creates_manifest_and_registers_in_project_file_without_copy(self):
+        project = self.root / 'new-project'
+        project.mkdir()
+        (project / '.git').mkdir()
+        manual = project / 'manual.txt'
+        manual.write_text('CMS-2 ARRAY declaration rules', encoding='utf-8')
+        location, source = add_reference(project, manual, language='CMS-2')
+        self.assertEqual(location, project / 'rosetta.json')
+        self.assertEqual(source.path, 'manual.txt')
+        self.assertEqual(json.loads(location.read_text())['sources'][0]['origin'], 'user-provided')
+
+    def test_failed_import_does_not_change_manifest_or_leave_copied_files(self):
+        before = (self.root / 'rosetta.json').read_bytes()
+        with tempfile.TemporaryDirectory() as upload:
+            unsupported = Path(upload) / 'manual.pdf'
+            unsupported.write_bytes(b'%PDF-1.4')
+            with self.assertRaisesRegex(ValueError, 'no .md'):
+                add_reference(self.root, unsupported, language='JOVIAL')
+        self.assertEqual((self.root / 'rosetta.json').read_bytes(), before)
+        self.assertFalse((self.root / 'references' / 'uploaded' / 'jovial.pdf').exists())
+
+    def test_catalog_validation_failure_rolls_back_manifest_and_external_copy(self):
+        before = (self.root / 'rosetta.json').read_bytes()
+        (self.root / 'runtime.md').unlink()
+        with tempfile.TemporaryDirectory() as upload:
+            manual = Path(upload) / 'jovial.md'
+            manual.write_text('# JOVIAL\nA valid UTF-8 manual.\n', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'runtime does not exist'):
+                add_reference(self.root, manual, language='JOVIAL')
+        self.assertEqual((self.root / 'rosetta.json').read_bytes(), before)
+        self.assertFalse((self.root / 'references' / 'uploaded' / 'jovial.md').exists())
+
+    def test_agent_prompt_asks_before_sourcing_missing_material(self):
+        prompt = cli._config(self.root)['agent']['rosetta-agent']['prompt']
+        self.assertIn('ask one concise question', prompt)
+        self.assertIn('do not guess or fetch material yet', prompt)
+        self.assertIn('rosetta references add', prompt)
 
     def test_docs_refresh_on_next_tool_call(self):
         registry = ReferenceRegistry(self.root)
