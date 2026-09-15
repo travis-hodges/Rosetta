@@ -28,53 +28,51 @@ const colors = (api: TuiPluginApi) => {
     selected: theme.backgroundElement,
     accent: theme.primary,
     info: theme.info,
-    warning: theme.warning,
-    violet: theme.syntaxNumber,
   }
 }
 
+const ROSETTA_GRADIENT = [
+  "#FF4D4D",
+  "#FF456A",
+  "#F43F8C",
+  "#E83EAF",
+  "#CB42CE",
+  "#A855F7",
+  "#7C3AED",
+] as const
+
 const ROSETTA_LOGO = [
   {
-    tone: "accent",
     lines: ["██████╗ ", "██╔══██╗", "██████╔╝", "██╔══██╗", "██║  ██║", "╚═╝  ╚═╝"],
   },
   {
-    tone: "info",
     lines: [" ██████╗ ", "██╔═══██╗", "██║   ██║", "██║   ██║", "╚██████╔╝", " ╚═════╝ "],
   },
   {
-    tone: "violet",
     lines: ["███████╗", "██╔════╝", "███████╗", "╚════██║", "███████║", "╚══════╝"],
   },
   {
-    tone: "warning",
     lines: ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "███████╗", "╚══════╝"],
   },
   {
-    tone: "changed",
     lines: ["████████╗", "╚══██╔══╝", "   ██║   ", "   ██║   ", "   ██║   ", "   ╚═╝   "],
   },
   {
-    tone: "violet",
     lines: ["████████╗", "╚══██╔══╝", "   ██║   ", "   ██║   ", "   ██║   ", "   ╚═╝   "],
   },
   {
-    tone: "accent",
     lines: [" █████╗ ", "██╔══██╗", "███████║", "██╔══██║", "██║  ██║", "╚═╝  ╚═╝"],
   },
 ] as const
 
 function CompactRosettaLogo(props: { api: TuiPluginApi }) {
   const skin = () => colors(props.api)
-  const letters = [
-    ["R", "accent"], ["O", "info"], ["S", "violet"], ["E", "warning"],
-    ["T", "changed"], ["T", "violet"], ["A", "accent"],
-  ] as const
+  const letters = ["R", "O", "S", "E", "T", "T", "A"] as const
   return (
     <text wrapMode="none">
       <span style={{ fg: skin().muted }}>◆ </span>
       <For each={letters}>
-        {(letter) => <span style={{ fg: skin()[letter[1]] }}><b>{letter[0]}</b></span>}
+        {(letter, index) => <span style={{ fg: ROSETTA_GRADIENT[index()] }}><b>{letter}</b></span>}
       </For>
       <span style={{ fg: skin().muted }}> ◆</span>
     </text>
@@ -89,10 +87,10 @@ function RosettaLogo(props: { api: TuiPluginApi }) {
       <Show when={wide()} fallback={<CompactRosettaLogo api={props.api} />}>
         <box flexDirection="row" flexShrink={0}>
           <For each={ROSETTA_LOGO}>
-            {(glyph) => (
+            {(glyph, index) => (
               <box flexDirection="column" flexShrink={0}>
                 <For each={glyph.lines}>
-                  {(line) => <text fg={skin()[glyph.tone]} wrapMode="none">{line}</text>}
+                  {(line) => <text fg={ROSETTA_GRADIENT[index()]} wrapMode="none">{line}</text>}
                 </For>
               </box>
             )}
@@ -100,11 +98,11 @@ function RosettaLogo(props: { api: TuiPluginApi }) {
         </box>
       </Show>
       <text wrapMode="none">
-        <span style={{ fg: skin().accent }}><b>UNDERSTAND</b></span>
+        <span style={{ fg: ROSETTA_GRADIENT[0] }}><b>UNDERSTAND</b></span>
         <span style={{ fg: skin().muted }}>  ◆  </span>
-        <span style={{ fg: skin().info }}><b>CHANGE</b></span>
+        <span style={{ fg: ROSETTA_GRADIENT[3] }}><b>CHANGE</b></span>
         <span style={{ fg: skin().muted }}>  ◆  </span>
-        <span style={{ fg: skin().violet }}><b>PROVE</b></span>
+        <span style={{ fg: ROSETTA_GRADIENT[6] }}><b>PROVE</b></span>
       </text>
     </box>
   )

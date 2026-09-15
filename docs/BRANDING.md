@@ -4,8 +4,8 @@ Rosetta is the product name on every rendered surface. The terminal wordmark, wi
 title, help text, permission dialogs, crash screen, tips, session title, footer, provider,
 model, and command examples must all say **Rosetta**.
 
-On startup, Rosetta owns the full home logo slot with a six-row block wordmark. Each
-letter uses a distinct color from the Rosetta theme, followed by the product loop:
+On startup, Rosetta owns the full home logo slot with a six-row block wordmark. Its
+letters form one continuous red-to-purple gradient, followed by the product loop:
 **UNDERSTAND ◆ CHANGE ◆ PROVE**. Narrow terminals receive a compact colored wordmark
 instead of clipping the banner.
 

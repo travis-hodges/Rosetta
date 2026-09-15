@@ -71,6 +71,8 @@ test('the shipped and generic TUI presets both declare the live project map', as
   assert.match(source, /sidebar_footer/);
   assert.match(source, /home_logo/);
   assert.match(source, /██████╗/);
+  assert.match(source, /#FF4D4D/);
+  assert.match(source, /#7C3AED/);
   assert.match(source, /UNDERSTAND/);
   assert.match(source, /CHANGE/);
   assert.match(source, /PROVE/);
