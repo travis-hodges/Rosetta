@@ -28,7 +28,86 @@ const colors = (api: TuiPluginApi) => {
     selected: theme.backgroundElement,
     accent: theme.primary,
     info: theme.info,
+    warning: theme.warning,
+    violet: theme.syntaxNumber,
   }
+}
+
+const ROSETTA_LOGO = [
+  {
+    tone: "accent",
+    lines: ["██████╗ ", "██╔══██╗", "██████╔╝", "██╔══██╗", "██║  ██║", "╚═╝  ╚═╝"],
+  },
+  {
+    tone: "info",
+    lines: [" ██████╗ ", "██╔═══██╗", "██║   ██║", "██║   ██║", "╚██████╔╝", " ╚═════╝ "],
+  },
+  {
+    tone: "violet",
+    lines: ["███████╗", "██╔════╝", "███████╗", "╚════██║", "███████║", "╚══════╝"],
+  },
+  {
+    tone: "warning",
+    lines: ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "███████╗", "╚══════╝"],
+  },
+  {
+    tone: "changed",
+    lines: ["████████╗", "╚══██╔══╝", "   ██║   ", "   ██║   ", "   ██║   ", "   ╚═╝   "],
+  },
+  {
+    tone: "violet",
+    lines: ["████████╗", "╚══██╔══╝", "   ██║   ", "   ██║   ", "   ██║   ", "   ╚═╝   "],
+  },
+  {
+    tone: "accent",
+    lines: [" █████╗ ", "██╔══██╗", "███████║", "██╔══██║", "██║  ██║", "╚═╝  ╚═╝"],
+  },
+] as const
+
+function CompactRosettaLogo(props: { api: TuiPluginApi }) {
+  const skin = () => colors(props.api)
+  const letters = [
+    ["R", "accent"], ["O", "info"], ["S", "violet"], ["E", "warning"],
+    ["T", "changed"], ["T", "violet"], ["A", "accent"],
+  ] as const
+  return (
+    <text wrapMode="none">
+      <span style={{ fg: skin().muted }}>◆ </span>
+      <For each={letters}>
+        {(letter) => <span style={{ fg: skin()[letter[1]] }}><b>{letter[0]}</b></span>}
+      </For>
+      <span style={{ fg: skin().muted }}> ◆</span>
+    </text>
+  )
+}
+
+function RosettaLogo(props: { api: TuiPluginApi }) {
+  const skin = () => colors(props.api)
+  const wide = () => props.api.renderer.width >= 68
+  return (
+    <box flexDirection="column" alignItems="center" flexShrink={0}>
+      <Show when={wide()} fallback={<CompactRosettaLogo api={props.api} />}>
+        <box flexDirection="row" flexShrink={0}>
+          <For each={ROSETTA_LOGO}>
+            {(glyph) => (
+              <box flexDirection="column" flexShrink={0}>
+                <For each={glyph.lines}>
+                  {(line) => <text fg={skin()[glyph.tone]} wrapMode="none">{line}</text>}
+                </For>
+              </box>
+            )}
+          </For>
+        </box>
+      </Show>
+      <text wrapMode="none">
+        <span style={{ fg: skin().accent }}><b>UNDERSTAND</b></span>
+        <span style={{ fg: skin().muted }}>  ◆  </span>
+        <span style={{ fg: skin().info }}><b>CHANGE</b></span>
+        <span style={{ fg: skin().muted }}>  ◆  </span>
+        <span style={{ fg: skin().violet }}><b>PROVE</b></span>
+      </text>
+    </box>
+  )
 }
 
 const statusLabel = (status: string) => {
@@ -415,6 +494,9 @@ const tui: TuiPlugin = async (api) => {
   api.slots.register({
     order: 10,
     slots: {
+      home_logo() {
+        return <RosettaLogo api={api} />
+      },
       sidebar_title(_context, props) {
         return <SessionTitle api={api} title={props.title} />
       },

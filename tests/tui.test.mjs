@@ -69,6 +69,11 @@ test('the shipped and generic TUI presets both declare the live project map', as
   assert.match(source, /sidebar_content/);
   assert.match(source, /sidebar_title/);
   assert.match(source, /sidebar_footer/);
+  assert.match(source, /home_logo/);
+  assert.match(source, /██████╗/);
+  assert.match(source, /UNDERSTAND/);
+  assert.match(source, /CHANGE/);
+  assert.match(source, /PROVE/);
   assert.match(source, /ROSETTA SESSION:/);
   assert.match(source, /ROSETTA_VERSION/);
   assert.match(source, /onMouseDown/);
