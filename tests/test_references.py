@@ -134,7 +134,7 @@ class ReferencesTests(unittest.TestCase):
         self.assertFalse((self.root / 'references' / 'uploaded' / 'jovial.md').exists())
 
     def test_agent_prompt_asks_before_sourcing_missing_material(self):
-        prompt = cli._config(self.root)['agent']['rosetta-agent']['prompt']
+        prompt = cli._config(self.root)['agent']['rosetta']['prompt']
         self.assertIn('ask one concise question', prompt)
         self.assertIn('do not guess or fetch material yet', prompt)
         self.assertIn('rosetta references add', prompt)

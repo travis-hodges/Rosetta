@@ -49,3 +49,13 @@ print(f"Run {shlex.quote(str(destination))} from the project you want to open.")
 print(f"Check setup with {shlex.quote(str(destination))} doctor")
 print(f"To use 'rosetta' by name, add {destination.parent} to your PATH.")
 PY
+
+# A clean Rosetta install must never expose the engine's upstream presentation.
+# Apply the reversible, byte-length-preserving branding patch when the engine is
+# available. The launcher will still install without it so `rosetta doctor` can
+# explain the missing prerequisite on a new machine.
+ROSETTA_ENGINE="$(command -v opencode || true)"
+if [[ -n "$ROSETTA_ENGINE" ]]; then
+  "${ROSETTA_PYTHON:-python3}" "$ROSETTA_SOURCE_ROOT/scripts/rosetta-brand.py" \
+    --binary "$ROSETTA_ENGINE" --no-command
+fi

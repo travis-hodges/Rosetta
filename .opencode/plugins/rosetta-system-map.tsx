@@ -403,7 +403,7 @@ const tui: TuiPlugin = async (api) => {
     }, 80)
   }
 
-  // OpenCode already owns project watching. Its events are enough to keep the
+  // The terminal engine already owns project watching. Its events are enough to keep the
   // panel current; a second recursive watcher and a polling loop only rescan.
   api.event.on("file.edited", (event) => refresh(normalizeEvent(event).file))
   api.event.on("file.watcher.updated", (event) => refresh(normalizeEvent(event).file))

@@ -1,6 +1,6 @@
 ---
 description: Take a VA VistA MUMPS change through Rosetta's full coding pipeline
-agent: rosetta-agent
+agent: rosetta
 ---
 Work this developer request through the Rosetta pipeline: $ARGUMENTS
 

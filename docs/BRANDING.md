@@ -1,125 +1,57 @@
-# Branding the harness as Rosetta
+# Rosetta presentation contract
 
-> This is the one file in the repository that names the upstream project Rosetta
-> adopts. Everywhere else the product says **Rosetta**; the only upstream strings
-> that survive elsewhere are literal addresses the binary itself reads — its
-> filename on PATH, the `OPENCODE_*` environment keys, `opencode.json`,
-> `.opencode/`, the `opencode.ai` schema URLs, and the `opencode` provider id.
-> Those are not branding, and renaming them breaks the tool.
+Rosetta is the product name on every rendered surface. The terminal wordmark, window
+title, help text, permission dialogs, crash screen, tips, session title, footer, provider,
+model, and command examples must all say **Rosetta**.
 
-Rosetta adopts OpenCode whole as the agent harness — [`docs/PROJECT.md` §5](PROJECT.md)
-rejects forking it, and nothing here forks it. What this does is rewrite the user-visible
-branding inside the already-installed binary and add a source-aware `rosetta`
-command that loads Rosetta's project workflows before it runs the harness.
+The default model is presented as **Rosetta Zen**. Rosetta has one selectable primary
+mode named **Rosetta**. Discovery, planning, editing, execution, and proof are stages in
+that session. The engine's stock `build` and `plan` modes are disabled, and Rosetta does
+not ship parallel Plan or Verify personalities.
+
+## Install behavior
+
+The documented installer and the source installer both run the branding step when the
+terminal engine is present. The patch is reversible, byte-length preserving, smoke-tested,
+and re-signed on macOS. A pristine backup is written beside the executable before the
+first change. Uninstall restores that backup before removing Rosetta's files.
 
 ```bash
 scripts/rosetta-brand.py
+scripts/rosetta-brand.py --check
+scripts/rosetta-brand.py --print-logo
+scripts/rosetta-brand.py --revert
 ```
 
-That patches the installed executable and installs the launcher. Verify with
-`scripts/rosetta-brand.py --check`, preview the wordmark with `--print-logo`, and undo
-everything with `--revert`.
+The command enters through Rosetta's Python launcher. That launcher injects the Rosetta
+theme, system map, reference tools, one primary agent, and command palette for the target
+project.
 
-## What you get
+## Internal compatibility names
 
+Several upstream protocol identifiers are load-bearing and remain internal:
+
+- the engine executable named `opencode`
+- `OPENCODE_*` environment keys
+- `opencode.json` and the `.opencode/` configuration directory
+- the `opencode` provider key and `opencode.ai` schema addresses
+- package-manager identifiers and credential storage paths
+
+They are implementation addresses rather than display names. Renaming them prevents the
+engine from finding its configuration, provider, or credentials. Rosetta's tests permit
+these tokens only in internal wiring and reject them from product-facing copy.
+
+## Verification
+
+Run the presentation audit, branding tests, and a real terminal smoke test:
+
+```bash
+python3 scripts/rosetta-brand.py --check
+python3 -m unittest tests.test_install
+npm test
+rosetta --version
 ```
-$ rosetta --help
-⠀                    ▄    ▄
-█▀▀▄ █▀▀█ █▀▀▀ █▀▀█ ▀█▀▀ ▀█▀▀ ▄▀▀█
-█    █  █ ▀▀▀█ █▀▀▀  █    █   █▀▀█
-▀    ▀▀▀▀ ▀▀▀▀ ▀▀▀▀  ▀▀   ▀▀  ▀▀▀▀
 
-Commands:
-  rosetta [project]           start rosetta tui                     [default]
-  rosetta run [message..]     run rosetta with a message
-  ...
-```
-
-53 replacement sites in total:
-
-| Surface | Change |
-|---|---|
-| Command name | `rosetta` on PATH (source-aware launcher in `~/.local/bin`, or beside `opencode`) |
-| Usage output | yargs script name, every command and positional description |
-| Wordmark | new `r s t a` glyphs drawn in the upstream 4×3 block font — plain, single-color, and the two-glyph monogram |
-| TUI home screen | one-color Rosetta wordmark instead of a dim `ro` / bright `setta` split |
-| MUMPS-first prompt | `MUMPS change…` with routine, global, and verification examples |
-| TUI palette | Rosetta charcoal, cream, and lemon theme; stacked diffs; blinking block cursor |
-| Running proof | scanner pulse for executable tools; staged isolate/observe/diverge/replay flight |
-| `--mini` splash | `ro` monogram plus **Rosetta**, and the `rosetta --mini -s <id>` resume hint |
-| Terminal title | `Rosetta` |
-| Permission dialogs | "until Rosetta is restarted", "Tell Rosetta what to do differently" |
-| Crash screen | "rosetta crashed", crash-report body |
-| Home-screen tips | runnable commands plus Rosetta Agent/Plan/Verify guidance |
-| Misc | `/exit` description, sound-pack name, upgrade/uninstall banners, MCP and model-not-found hints |
-
-`opencode` still works and shows the same branding: it is the same binary, and Homebrew
-and npm need that name to stay.
-
-The command intentionally does not point straight at the harness executable.
-It enters through Rosetta's Python launcher, which selects the current project
-as the default corpus and injects the Rosetta MCP server, agents, instructions
-and command palette. The branding script migrates the older direct symlink.
-
-The injected local plugin also owns the presentation layer around proof runs:
-an in-motion scanner for long executable calls, staged toasts for isolation,
-observation, divergence, repair, and receipt creation, plus the `/demo` custom tool.
-The pulse describes work in progress and stops before the evidence toast, so motion
-can never be mistaken for a completed proof. The tool executes a bounded
-live YottaDB flight and falls back to a clearly labeled recorded audit trace;
-it does not simulate tool output in the model prompt.
-
-## What is deliberately left alone
-
-Renaming any of these breaks the tool, so the script does not touch them:
-
-- the `opencode` **provider id** and its `OPENCODE_API_KEY` / `x-opencode-*` headers
-- config discovery — `opencode.json`, `opencode.jsonc`, `~/.config/opencode/`,
-  `.opencode/` (commands, agents, tools, plugins, themes)
-- credential and log paths under `~/.local/share/opencode/`
-- package-manager identities (`opencode-ai`, the Homebrew formula) and `opencode upgrade`
-- the `opencode.local` mDNS default and the `opencode` default server username, because the
-  help text for those documents a real value
-- `opencode.ai` URLs, the GitHub app, and product names like OpenCode Zen / OpenCode Go
-- the built-in theme id `opencode` and the ~2,800 `OpenCode` mentions in HTTP API
-  descriptions, which no user reads
-
-## How it works, and why it is safe
-
-The binary is a Bun single-file executable: a Mach-O with the JavaScript bundle embedded
-at fixed byte offsets. So every replacement is **byte-length preserving**. A shortened
-string is padded with spaces at a JavaScript token boundary — after a closing quote or
-paren, never inside a literal — which JavaScript ignores and the loader's offsets never
-notice. The script refuses any patch that would grow the file or that changes its trailing
-delimiter.
-
-That invariant covers the **bundle**, not the file. Patching invalidates the code
-signature, so the binary is re-signed ad hoc, which replaces the signature blob outright.
-The stock binary ships linker-signed with 4 KB page hashes; an ad-hoc re-sign uses a larger
-page size and produces a much smaller CodeDirectory. On 1.18.29 (arm64) the file came out
-837,666 bytes *smaller* than the original, essentially all of it CodeDirectory
-(1,117,214 → 279,498 bytes, 34,910 → 8,728 hashes).
-
-So **do not compare file sizes to decide whether the patch is sound** — they are expected
-to differ, and the difference is large enough to look alarming. Compare the sha256 values
-in `opencode.exe.rosetta-brand.json` against the backup and the live binary, or run
-`--check`.
-
-Around that:
-
-- the pristine binary is copied to `opencode.exe.rosetta-orig` before the first write, and
-  every run patches *from that backup*, so it is idempotent rather than cumulative
-- the new file is written to a temp path and `os.replace`d in, which leaves the sibling
-  hardlink in `opencode-darwin-arm64/` untouched
-- macOS gets a fresh ad-hoc signature (`codesign --force --sign -`); a modified Mach-O is
-  killed on arm64 without one
-- the result is smoke-tested with `--version`, and **auto-reverted** if it fails to run
-- all wordmark shape and foreground patches are marked required: if a future upstream build changes them,
-  the script aborts before writing anything rather than half-patching
-
-## After an upgrade
-
-`brew upgrade opencode` or `npm i -g opencode-ai@latest` replaces the binary and drops
-every patch. `scripts/rosetta-brand.py --check` reports `branding not applied` or
-`branding stale`; re-run the script. If the upstream build has moved the strings by then, the run
-aborts untouched and the patch table in the script needs updating.
+An engine upgrade replaces the patched executable. Re-run the Rosetta installer or
+`scripts/rosetta-brand.py`; required patches fail before writing if the new bundle no
+longer matches the safe replacement table.

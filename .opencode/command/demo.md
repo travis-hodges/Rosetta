@@ -1,6 +1,6 @@
 ---
 description: Run Rosetta's live YottaDB proof flight with a recorded fallback
-agent: rosetta-verify
+agent: rosetta
 subtask: true
 ---
 Call `rosetta_showcase` exactly once. It runs a short, fresh YottaDB proof on a

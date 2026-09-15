@@ -1,7 +1,6 @@
 ---
 description: Orient an operator to Rosetta's legacy-system editor
-agent: rosetta-plan
-subtask: true
+agent: rosetta
 ---
 Orient the developer to this workspace in no more than eight lines.
 

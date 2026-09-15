@@ -1,6 +1,6 @@
 ---
 description: Verify the current candidate against the baseline and explain any divergence
-agent: rosetta-verify
+agent: rosetta
 ---
 Run `verify_change` on the routine we are working on: $ARGUMENTS
 

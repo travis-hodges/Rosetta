@@ -135,23 +135,22 @@ def _config(project: Path | None = None) -> dict[str, Any]:
         config["instructions"].append(str(target))
     plugin = REPO_ROOT / ".opencode" / "plugins" / "rosetta-experience.js"
     config["plugin"] = [plugin.resolve().as_uri()]
-    for name in ("rosetta-agent", "rosetta-plan", "rosetta-verify"):
-        profile = REPO_ROOT / ".opencode" / "agent" / f"{name}.md"
-        prompt = profile.read_text(encoding="utf-8").split("---", 2)[-1].strip()
-        config.setdefault("agent", {}).setdefault(name, {})["prompt"] = prompt
+    profile = REPO_ROOT / ".opencode" / "agent" / "rosetta.md"
+    prompt = profile.read_text(encoding="utf-8").split("---", 2)[-1].strip()
+    config.setdefault("agent", {}).setdefault("rosetta", {})["prompt"] = prompt
     inventory = ", ".join(
         f"{s.title} [{s.language}]" if s.language else s.title for s in sources
     )
     if inventory:
-        config["agent"]["rosetta-agent"]["prompt"] += (
+        config["agent"]["rosetta"]["prompt"] += (
             "\n\nAvailable repository references (use reference_sources for details): " + inventory
         )
     commands = repository.get("commands", {})
     if commands:
-        config["agent"]["rosetta-agent"]["prompt"] += (
+        config["agent"]["rosetta"]["prompt"] += (
             "\nRepository-provided commands (run with the normal shell tool): " + json.dumps(commands)
         )
-    config["agent"]["rosetta-agent"]["prompt"] += "\n" + STEERING
+    config["agent"]["rosetta"]["prompt"] += "\n" + STEERING
     config["command"] = {}
     return config
 
@@ -212,7 +211,7 @@ def _merge_user_config(config: dict[str, Any], raw: str) -> dict[str, Any]:
     ):
         raise ValueError("OPENCODE_CONFIG_CONTENT 'instructions' must be an array of strings.")
     config["instructions"] = [*user_instructions, *config.get("instructions", [])]
-    config["default_agent"] = "rosetta-agent"
+    config["default_agent"] = "rosetta"
     return config
 
 
@@ -230,6 +229,10 @@ def cmd_tui(args: argparse.Namespace) -> int:
         env["ROSETTA_HOME"] = str(REPO_ROOT)
         env["ROSETTA_VERSION"] = __version__
         env["ROSETTA_PYTHON"] = sys.executable
+        # Rosetta owns its release lifecycle. The embedded engine's updater
+        # compares unrelated engine and Rosetta version numbers and would
+        # otherwise offer to replace the branded runtime from inside the TUI.
+        env["OPENCODE_DISABLE_AUTOUPDATE"] = "1"
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(REPO_ROOT), env.get("PYTHONPATH", "")]))
         # The Rosetta theme lives beside its shipped agents and commands. The
         # TUI can open any target project, so make that source directory
@@ -266,7 +269,7 @@ def cmd_tui(args: argparse.Namespace) -> int:
             command.extend(["run", "--dir", str(project)])
             if getattr(args, "format", "default") == "json":
                 command.extend(["--format", "json"])
-        command.extend(["--agent", "rosetta-agent"])
+        command.extend(["--agent", "rosetta"])
         if args.model:
             from rosetta import models as model_registry
 

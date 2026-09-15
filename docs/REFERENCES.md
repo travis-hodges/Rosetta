@@ -1,9 +1,9 @@
 # Repository-provided technical references
 
-Rosetta extends the installed OpenCode harness with four MCP tools:
+Rosetta includes four repository-reference tools:
 `reference_sources`, `reference_search`, `reference_read`, and `reference_examples`.
 Normal file inspection, editing, shell execution, permissions, conversations and
-tool-event rendering remain OpenCode's. Rosetta does not classify every repository or
+tool-event rendering remain part of the same Rosetta session. Rosetta does not classify every repository or
 force a lookup. The agent assesses whether the requested work actually depends on a
 language, runtime, or platform it cannot handle reliably, then inspects the local source
 inventory before editing. Familiar-language work and tasks supported by repository
@@ -11,9 +11,9 @@ evidence continue without an onboarding prompt.
 
 ## Install and launch
 
-Requirements: Python 3.11+, an installed OpenCode executable, and a configured model.
+Requirements: Python 3.11+, the Rosetta terminal engine, and a configured model.
 The reference service adds no Python or JavaScript dependencies. For model/provider
-setup use OpenCode's existing configuration. Local references need no internet;
+setup use Rosetta's provider configuration. Local references need no internet;
 a hosted model still needs its provider connection. A fully offline agent requires
 an already configured local model.
 
@@ -175,8 +175,7 @@ task dispatch. Tests establish finite behavioral evidence, not correctness for a
 concurrent writers, external I/O or caller-local variables outside the frozen contract.
 
 Existing VistA/FileMan CLI commands remain available (`rosetta fileman`, `rosetta db`,
-`rosetta eval`, `rosetta verify`, benchmarks). Their old TUI assets remain under `.opencode`;
+`rosetta eval`, `rosetta verify`, benchmarks). Internal TUI assets remain under `.opencode`;
 the generic launcher uses `.opencode/generic` so unrelated projects do not inherit the
-VistA system map or domain slash commands. Prior instruction profiles are preserved in
-`.opencode/legacy`. `rosetta demo` remains the explicitly recorded historical verifier
+VistA system map or domain slash commands. `rosetta demo` remains the explicitly recorded historical verifier
 replay; it is separate from running a fresh coding task in `examples/payments`.

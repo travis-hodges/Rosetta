@@ -4,7 +4,7 @@
 
 ## Current product direction — September 13, 2026
 
-Rosetta gives an OpenCode coding agent repository-provided technical references it can
+Rosetta gives its coding agent repository-provided technical references it can
 consult when its existing knowledge is uncertain. The core reference abstraction is a
 `ReferenceSource`: a local document or collection with provenance and cheap relevance
 metadata. It works for language manuals, internal DSLs, SDKs and APIs without new agent

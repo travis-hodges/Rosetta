@@ -156,14 +156,14 @@ class BrandingFontTests(unittest.TestCase):
             b"f(t,U.text,!0)",
         )
 
-    def test_mumps_prompt_label_has_no_visible_padding(self):
+    def test_rosetta_prompt_label_has_no_visible_padding(self):
         patches = {
             name: (old, new)
             for name, old, new, _required in self.branding.build_patches()
         }
         old, new = patches["prompt label"]
         self.assertEqual(len(old), len(new))
-        self.assertIn(b"MUMPS change", new)
+        self.assertIn(b"Make changes", new)
 
 
 class SourceInstallationTests(unittest.TestCase):
@@ -237,7 +237,8 @@ class SourceInstallationTests(unittest.TestCase):
         self.assertEqual(lines[0], str(self.directory.resolve()))
         self.assertIn(str(self.directory.resolve()), lines)
         self.assertIn("--agent", lines)
-        self.assertIn("rosetta-agent", lines)
+        self.assertIn("rosetta", lines)
+        self.assertNotIn("rosetta-agent", lines)
 
     def test_project_path_is_the_default_tui_and_mumps_corpus(self):
         project = self.directory / "target project"
@@ -264,6 +265,12 @@ class SourceInstallationTests(unittest.TestCase):
             result.stdout.strip(),
             str((self.checkout / ".opencode" / "generic").resolve()),
         )
+
+    def test_tui_disables_the_embedded_engine_updater(self):
+        self.fake_harness('printf "%s\\n" "$OPENCODE_DISABLE_AUTOUPDATE"\nexit 0\n')
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "1")
 
     def test_an_explicit_tui_preset_override_is_preserved(self):
         override = self.directory / "operator-tui.json"
@@ -369,16 +376,29 @@ class TuiConfigurationTests(unittest.TestCase):
         self.assertEqual(theme["defs"]["acid"], "#DDF95C")
         self.assertEqual(theme["theme"]["diffRemoved"]["dark"], "alarm")
 
-    def test_external_project_receives_generic_tools_and_normal_agent(self):
+    def test_external_project_receives_one_rosetta_primary_mode(self):
         config = cli._config()
         self.assertEqual(config["command"], {})
         self.assertEqual(set(config["mcp"]), {"references"})
-        self.assertEqual(config["default_agent"], "rosetta-agent")
+        self.assertEqual(config["default_agent"], "rosetta")
         self.assertTrue(config["plugin"][0].endswith("/.opencode/plugins/rosetta-experience.js"))
         self.assertEqual(config["model"], "opencode/big-pickle")
-        self.assertNotIn("MUMPS", config["agent"]["rosetta-agent"]["prompt"])
-        self.assertNotIn("build", config["agent"])
-        self.assertNotIn("plan", config["agent"])
+        self.assertNotIn("MUMPS", config["agent"]["rosetta"]["prompt"])
+        self.assertTrue(config["agent"]["build"]["disable"])
+        self.assertTrue(config["agent"]["plan"]["disable"])
+        primary = [name for name, entry in config["agent"].items() if entry.get("mode") == "primary"]
+        self.assertEqual(primary, ["rosetta"])
+        self.assertEqual(config["provider"]["opencode"]["name"], "Rosetta")
+        self.assertEqual(
+            config["provider"]["opencode"]["models"]["big-pickle"]["name"],
+            "Rosetta Zen",
+        )
+
+    def test_every_slash_command_stays_in_the_rosetta_session(self):
+        command_dir = cli.REPO_ROOT / ".opencode" / "command"
+        for path in command_dir.glob("*.md"):
+            with self.subTest(command=path.stem):
+                self.assertIn("agent: rosetta\n", path.read_text(encoding="utf-8"))
 
     def test_user_surfaces_are_merged_without_displacing_rosetta(self):
         base = cli._config()
@@ -395,14 +415,14 @@ class TuiConfigurationTests(unittest.TestCase):
         self.assertIn("user-server", merged["mcp"])
         self.assertIn("references", merged["mcp"])
         self.assertIn("reviewer", merged["agent"])
-        self.assertIn("rosetta-agent", merged["agent"])
+        self.assertIn("rosetta", merged["agent"])
         self.assertIn("ship", merged["command"])
         self.assertEqual(merged["command"]["ship"]["template"], "Ship it")
         self.assertIn("/tmp/user-instructions.md", merged["instructions"])
         self.assertIn(str(cli.ROOT / ".opencode" / "instructions.md"), merged["instructions"])
         self.assertEqual(merged["plugin"][0], "example-plugin")
         self.assertTrue(merged["plugin"][-1].endswith("rosetta-experience.js"))
-        self.assertEqual(merged["default_agent"], "rosetta-agent")
+        self.assertEqual(merged["default_agent"], "rosetta")
 
     def test_model_label_merge_preserves_user_provider_settings(self):
         merged = cli._merge_user_config(cli._config(), json.dumps({
@@ -419,7 +439,8 @@ class TuiConfigurationTests(unittest.TestCase):
         provider = merged["provider"]["opencode"]
         self.assertEqual(provider["options"]["timeout"], 90000)
         self.assertIn("another", provider["models"])
-        self.assertEqual(provider["models"]["big-pickle"]["name"], "My model")
+        self.assertEqual(provider["name"], "Rosetta")
+        self.assertEqual(provider["models"]["big-pickle"]["name"], "Rosetta Zen")
         self.assertEqual(
             provider["models"]["big-pickle"]["options"]["temperature"],
             0.2,
@@ -449,7 +470,7 @@ class ReleaseArtifactTests(unittest.TestCase):
                 f"{root}/.opencode/themes/rosetta.json",
                 f"{root}/.opencode/plugins/rosetta-experience.js",
                 f"{root}/.opencode/plugins/rosetta-system-map.tsx",
-                f"{root}/.opencode/agent/rosetta-agent.md",
+                f"{root}/.opencode/agent/rosetta.md",
                 f"{root}/.opencode/command/demo.md",
             }
             self.assertEqual(expected - names, set())

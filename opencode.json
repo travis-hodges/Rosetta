@@ -12,30 +12,31 @@
     }
   },
   "model": "opencode/big-pickle",
-  "default_agent": "rosetta-agent",
+  "provider": {
+    "opencode": {
+      "name": "Rosetta",
+      "models": {
+        "big-pickle": {
+          "name": "Rosetta Zen"
+        }
+      }
+    }
+  },
+  "default_agent": "rosetta",
   "instructions": [
     ".opencode/instructions.md"
   ],
   "agent": {
-    "rosetta-agent": {
+    "rosetta": {
       "description": "Implement and verify software changes, consulting technical references when useful.",
       "mode": "primary",
       "color": "#ddf95c"
     },
-    "rosetta-plan": {
-      "description": "Inspect software and references without modifying files.",
-      "mode": "primary",
-      "permission": {
-        "edit": "deny",
-        "bash": "deny"
-      }
+    "build": {
+      "disable": true
     },
-    "rosetta-verify": {
-      "description": "Run project checks and report evidence without editing code.",
-      "mode": "primary",
-      "permission": {
-        "edit": "deny"
-      }
+    "plan": {
+      "disable": true
     }
   }
 }

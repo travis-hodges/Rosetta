@@ -1,6 +1,6 @@
 ---
 description: Inspect and manage persistent YottaDB state through audited change plans
-agent: rosetta-agent
+agent: rosetta
 ---
 Manage database state for this request: $ARGUMENTS
 

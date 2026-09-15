@@ -1,6 +1,6 @@
 ---
 description: Turn an operational request into a controlled code and database change
-agent: rosetta-agent
+agent: rosetta
 ---
 Work this operational request as a Rosetta change: $ARGUMENTS
 

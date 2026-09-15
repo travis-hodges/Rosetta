@@ -5,19 +5,16 @@ Install a dependency-free launcher with
 existing file or changes your shell settings. Keep the checkout and interpreter in place.
 Optional pip editable installation is also supported by the package metadata.
 Then `cd` to a project and run `rosetta`. That opens the Rosetta TUI with
-Rosetta Agent, Plan, and Verify modes, MCP tools, instructions, and slash
+one continuous Rosetta workflow, reference tools, instructions, and slash
 commands injected in memory; it does not write `.opencode` files into the
 project. `rosetta /another/project` opens a different directory.
 `rosetta --help` lists the secondary CLI workflows.
 
-Rosetta is always enabled. Press Tab to move between:
+Rosetta uses one primary mode for discovery, planning, editing, execution, and proof.
+Those are stages of the same session rather than separate personalities selected with Tab.
 
-- **Rosetta Agent** — the default implementation mode.
-- **Rosetta Plan** — read-only routine, call, global, and case planning.
-- **Rosetta Verify** — read-only executable proof and divergence explanation.
-
-The default model ID remains the harness's built-in `opencode/big-pickle`, but Rosetta presents it as
-**Translator 1.0** in the product UI. This is a display identity, not evidence
+The internal default model ID remains unchanged for provider compatibility, but Rosetta presents it as
+**Rosetta Zen** throughout the product UI. This is a display identity, not evidence
 of MUMPS specialization; benchmark it before making a capability claim.
 
 Inside the TUI, use `/start` for orientation, `/change REQUEST` for an
@@ -65,9 +62,8 @@ your own harness configuration (replace the endpoint and served model ID):
 
 Then use `--model specialist/your-served-model-id`. The server must already be running,
 and its model must support the chosen workflow. A configured name does not establish
-model quality; measure it. Provider setup follows the official
-[upstream providers documentation](https://opencode.ai/docs/providers/#custom-provider)
-and [configuration documentation](https://opencode.ai/docs/config/).
+model quality; measure it. Provider setup follows the terminal engine's provider and
+configuration documentation.
 
 Hosted providers receive the code sent to them. Local operation requires a local model
 endpoint and installed local runtime; selecting a hosted model is not an air gap.

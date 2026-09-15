@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebrand the installed OpenCode binary as Rosetta.
+"""Apply Rosetta branding to the installed terminal engine.
 
 OpenCode is adopted whole as the agent harness (docs/PROJECT.md §5 rejects
 forking it). This script does not fork anything: it rewrites the user-visible
@@ -48,6 +48,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -300,16 +301,49 @@ def build_patches() -> list[tuple[str, bytes, bytes, bool]]:
         'K("Tell Rosetta what to do differently")')
     add("/exit description", 'description:"close OpenCode"', 'description:"close Rosetta"')
     add("sound pack name", 'name:"OpenCode Default"', 'name:"Rosetta Default"')
+    add("provider name", 'name:"OpenCode Zen"', 'name:"Rosetta Zen"')
+    add(
+        "provider connection description",
+        'OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key."',
+        'Rosetta Zen gives you access to all the best coding models at the cheapest prices with a single API key."',
+    )
+    add(
+        "provider connection description (compact)",
+        'OpenCode Zen gives you access to a curated set of reliable optimized models for coding agents."',
+        'Rosetta Zen gives you access to a curated set of reliable optimized models for coding agents."',
+    )
 
-    # --- MUMPS-first home screen --------------------------------------------
+    # These defaults are visible in `--help` and service discovery. Rosetta owns
+    # the server it launches, so the branded local domain and service name are
+    # the truthful runtime values as well as the right presentation.
+    add(
+        "mDNS help",
+        'custom domain name for mDNS service (default: opencode.local)"',
+        'custom domain name for mDNS service (default: rosetta.local)"',
+    )
+    add(
+        "mDNS schema help",
+        'Custom domain name for mDNS service (default: opencode.local)"',
+        'Custom domain name for mDNS service (default: rosetta.local)"',
+    )
+    add("mDNS default", 'default:"opencode.local"', 'default:"rosetta.local"')
+    add("mDNS runtime default", 'i??"opencode.local"', 'i??"rosetta.local"')
+    add("mDNS service name", 'g=`opencode-${n}`', 'g=`rosetta-${n}`')
+    add(
+        "single-agent status hint",
+        'L(JU,{when:!0,get children(){var tU=a("text"),ZU=K(" "),hU=a("span");',
+        'L(JU,{when:!1,get children(){var tU=a("text"),ZU=K(" "),hU=a("span");',
+    )
+
+    # --- Rosetta home screen -------------------------------------------------
     add(
         "prompt label",
         'return`Ask anything\\u2026 "',
-        'return`MUMPS change\\u2026 "',
+        'return`Make changes\\u2026 "',
     )
     for old, new in (
-        ("Fix a TODO in the codebase", "Explain a MUMPS routine"),
-        ("What is the tech stack of this project?", "Trace this VistA routine and globals"),
+        ("Fix a TODO in the codebase", "Understand unfamiliar code"),
+        ("What is the tech stack of this project?", "Trace behavior and data"),
         ("Fix broken tests", "Verify my change"),
     ):
         add(f'prompt example: "{old}"', jsstr(old), jsstr(new))
@@ -340,14 +374,17 @@ def build_patches() -> list[tuple[str, bytes, bytes, bool]]:
         "Run {highlight}opencode agent create{/highlight} for guided agent creation",
         "Run {highlight}opencode github install{/highlight} to set up the GitHub workflow",
         "Run {highlight}opencode debug config{/highlight} to troubleshoot configuration",
+        "Use {highlight}/connect{/highlight} with OpenCode Zen for curated, tested models",
         "Create a plugin to prevent OpenCode from reading sensitive files",
         "OpenCode includes free models so you can start immediately.",
     ]:
         replacement = {
             "Create a plugin to prevent OpenCode from reading sensitive files":
-                "Use /routine before editing unfamiliar MUMPS code",
+                "Use repository references before unfamiliar edits",
             "OpenCode includes free models so you can start immediately.":
-                "Press Tab: Rosetta Agent, Plan, or Verify.",
+                "Rosetta plans, edits, and proves changes in one session.",
+            "Use {highlight}/connect{/highlight} with OpenCode Zen for curated, tested models":
+                "Use {highlight}/connect{/highlight} with Rosetta Zen for curated, tested models",
         }.get(text, text.replace("opencode", brand).replace("OpenCode", BRAND))
         add(f"tip: {text[:44]}...",
             f'"{text}"',
@@ -367,9 +404,7 @@ def find_binary(explicit: str | None) -> Path:
     found = shutil.which("opencode")
     if not found:
         sys.exit(
-            "opencode is not on PATH. Install it first:\n"
-            "  brew install anomalyco/tap/opencode\n"
-            "  npm install -g opencode-ai"
+            "Rosetta's terminal engine is not installed. See docs/DISTRIBUTION.md."
         )
     return Path(found).resolve()
 
@@ -382,12 +417,20 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def opencode_version(binary: Path) -> str:
+def engine_version(binary: Path) -> str:
     try:
         out = subprocess.run([str(binary), "--version"], capture_output=True, text=True, timeout=60)
         return out.stdout.strip() or "unknown"
     except Exception:
         return "unknown"
+
+
+def product_version() -> str:
+    source = (REPO_ROOT / "rosetta" / "__init__.py").read_text(encoding="utf-8")
+    match = re.search(r'^__version__\s*=\s*"([^"]+)"', source, re.MULTILINE)
+    if not match:
+        sys.exit("Rosetta version is missing from rosetta/__init__.py")
+    return match.group(1)
 
 
 def resign(binary: Path) -> None:
@@ -488,7 +531,7 @@ def cmd_check(binary: Path) -> int:
     state = read_state(binary)
     backup = binary.with_name(binary.name + BACKUP_SUFFIX)
     print(f"binary   {binary}")
-    print(f"version  {opencode_version(binary)}")
+    print(f"version  {engine_version(binary)}")
     print(f"backup   {backup if backup.is_file() else 'none'}")
     if not state:
         print("branding not applied")
@@ -496,7 +539,7 @@ def cmd_check(binary: Path) -> int:
     digest = sha256(binary)
     if digest == state.get("patched_sha256"):
         print(f"branding applied ({state.get('patch_count')} patches, "
-              f"opencode {state.get('version')})")
+              f"engine {state.get('version')})")
         status = 0
     else:
         print("branding stale: the binary changed since it was patched "
@@ -527,12 +570,21 @@ def cmd_revert(binary: Path) -> int:
 
 def cmd_apply(binary: Path, bin_dir: Path | None, want_command: bool) -> int:
     patches = build_patches()
-    validate(patches)
 
     backup = binary.with_name(binary.name + BACKUP_SUFFIX)
     if not backup.is_file():
         print(f"backing up -> {backup.name}")
         shutil.copy2(binary, backup)
+    upstream_version = engine_version(backup)
+    if upstream_version == "unknown":
+        sys.exit("could not read the terminal engine version; refusing to patch")
+    patches.append((
+        "Rosetta release version",
+        jsstr(upstream_version),
+        jsstr(product_version()),
+        True,
+    ))
+    validate(patches)
     original = sha256(backup)
 
     data = bytearray(backup.read_bytes())
@@ -574,11 +626,11 @@ def cmd_apply(binary: Path, bin_dir: Path | None, want_command: bool) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Rebrand the installed OpenCode binary as Rosetta.",
+        description="Apply Rosetta branding to the installed terminal engine.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    ap.add_argument("--binary", help="path to the opencode executable (default: from PATH)")
+    ap.add_argument("--binary", help="path to the terminal engine executable (default: from PATH)")
     ap.add_argument("--bin-dir", help="directory to install the `rosetta` command into")
     ap.add_argument("--no-command", action="store_true", help="patch only")
     ap.add_argument("--check", action="store_true", help="report state, change nothing")

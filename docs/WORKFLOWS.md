@@ -65,9 +65,9 @@ corpus. `rosetta /another/project` opens another directory. The launcher
 injects Rosetta's config in memory, so it does not leave `.opencode` files in
 the project.
 
-The first screen says `MUMPS change…` and starts with **Translator 1.0**.
-Press Tab to cycle through **Rosetta Agent**, **Rosetta Plan**, and **Rosetta
-Verify**—Rosetta itself never turns off. Use `/start` for a short capability
+The first screen says `Make changes…` and starts with **Rosetta Zen**.
+Rosetta handles discovery, planning, editing, and proof in one continuous session.
+Use `/start` for a short capability
 orientation, `/change REQUEST` for an intentional code-and-database change, or
 `/pipeline REQUEST` for a focused code workflow. Type `/` for the supporting
 services.

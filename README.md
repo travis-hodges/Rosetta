@@ -1,7 +1,7 @@
 # Rosetta
 
 Coding models have uneven competence in unfamiliar technical environments. Rosetta
-adds repository-provided technical references to OpenCode so the agent can look up
+gives its coding agent repository-provided technical references so it can look up
 missing knowledge, edit real software, and check the result against its runtime.
 
 - Four real tools: source inventory, search, incremental reading, and examples.
@@ -17,7 +17,7 @@ bash scripts/install.sh --bin-dir "$HOME/.local/bin"
 rosetta /path/to/project
 ```
 
-Requires Python 3.11+ and an installed/configured OpenCode harness. Local retrieval is
+Requires Python 3.11+ and an installed/configured terminal engine. Local retrieval is
 offline; hosted model access needs a connection. The MUMPS demo additionally needs
 the existing Docker/YottaDB runtime. [Runtime setup](docs/REFERENCES.md#real-mumps-demo).
 

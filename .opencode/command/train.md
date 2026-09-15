@@ -1,6 +1,6 @@
 ---
 description: Build verified training data or inspect the verifier grader
-agent: rosetta-agent
+agent: rosetta
 ---
 Manage the training workflow requested here: $ARGUMENTS
 

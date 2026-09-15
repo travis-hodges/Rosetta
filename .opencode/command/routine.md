@@ -1,6 +1,6 @@
 ---
 description: Explain an unfamiliar VistA routine, grounded in the data dictionary
-agent: rosetta-explain
+agent: rosetta
 ---
 Explain the VistA routine: $ARGUMENTS
 
