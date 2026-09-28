@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Download Rosetta. One command, Python 3.11+, no dependencies. Verify the checksum before you install, and read the installer first if you would rather.">
+  <meta name="description" content="Download Rosetta. Python 3.11+ with no third-party Python packages; the editor uses the separately installed OpenCode terminal engine. Verify the release checksum before installing.">
   <meta name="theme-color" content="#eeeee7">
   <meta property="og:title" content="Download Rosetta">
   <meta property="og:description" content="One command. Python 3.11+. No dependencies. Checksums published with every release.">
@@ -26,11 +26,12 @@
 <p class="section-pad"><a href="./references.html">New: repository reference tools and the real MUMPS coding demo ↗</a></p>
 
 <section class="section-pad" aria-labelledby="download-title">
-  <div class="section-kicker mono"><span>01 / GET IT ON YOUR MACHINE</span><span>PYTHON 3.11+ · NO DEPENDENCIES</span></div>
+  <div class="section-kicker mono"><span>01 / GET IT ON YOUR MACHINE</span><span>PYTHON 3.11+ · NO PYTHON PACKAGES</span></div>
   <div class="section-heading">
     <h2 id="download-title" class="reveal">Download<br><em>Rosetta.</em></h2>
-    <p>The tool is pure Python with no third-party dependencies. It installs into your
-    home directory, never asks for <code>sudo</code>, and never edits your shell profile.</p>
+    <p>The tool is pure Python with no third-party Python packages. It installs into your
+    home directory without <code>sudo</code> or shell profile edits. The editor also needs
+    the OpenCode terminal engine installed separately.</p>
   </div>
 
   <div id="release-panel" class="release-panel">
@@ -64,8 +65,8 @@
   <div class="section-kicker mono"><span>03 / WHAT IT NEEDS</span><span>AND WHAT IT DOES NOT</span></div>
   <div class="section-heading">
     <h2 id="requirements-title">Three payloads,<br><em>three owners.</em></h2>
-    <p>Conflating these is the main way installing Rosetta goes wrong. Only the first
-    two come from us.</p>
+    <p>Only the first two come from us. OpenCode is a separate prerequisite for
+    interactive editing; the YottaDB runtime is needed for live MUMPS proof.</p>
   </div>
   <div class="payload-grid">
     <article>
@@ -89,7 +90,7 @@
       without it.</p>
     </article>
   </div>
-  <div class="evidence-note"><span class="status-dot"></span><p><code>rosetta demo</code> and <code>rosetta doctor</code> are built to run with no container and no network, so you can see the thesis before provisioning anything.</p><a href="https://github.com/travis-hodges/Rosetta/blob/main/docs/WORKFLOWS.md" target="_blank" rel="noreferrer">Read the workflows ↗</a></div>
+  <div class="evidence-note"><span class="status-dot"></span><p><code>rosetta status</code> reports your project's references and declared checks offline. <code>rosetta demo</code> replays recorded MUMPS evidence offline; <code>rosetta doctor</code> checks live model access and the MUMPS runtime.</p><a href="https://github.com/travis-hodges/Rosetta/blob/main/docs/WORKFLOWS.md" target="_blank" rel="noreferrer">Read the workflows ↗</a></div>
 </section>
 
 <section class="section-pad alt-band" aria-labelledby="source-title">
@@ -102,7 +103,7 @@
   <div class="quickstart">
     <div class="command-row"><div><span class="mono">01 / CLONE</span><code>git clone https://github.com/travis-hodges/Rosetta.git</code></div><button type="button" data-copy="git clone https://github.com/travis-hodges/Rosetta.git" aria-label="Copy the clone command">Copy</button></div>
     <div class="command-row"><div><span class="mono">02 / INSTALL THE LAUNCHER</span><code>bash scripts/install.sh --bin-dir ~/.local/bin</code></div><button type="button" data-copy="bash scripts/install.sh --bin-dir ~/.local/bin" aria-label="Copy the launcher install command">Copy</button></div>
-    <div class="command-row"><div><span class="mono">03 / CHECK THE MACHINE</span><code>rosetta doctor</code></div><button type="button" data-copy="rosetta doctor" aria-label="Copy the doctor command">Copy</button></div>
+    <div class="command-row"><div><span class="mono">03 / CHECK THIS PROJECT</span><code>rosetta status</code></div><button type="button" data-copy="rosetta status" aria-label="Copy the status command">Copy</button></div>
     <p class="fine-print">The launcher resolves the checkout from its own location, so
     <code>rosetta</code> works from any directory. Keep the checkout where it is, or
     reinstall the launcher after moving it.</p>

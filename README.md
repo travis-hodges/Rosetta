@@ -14,8 +14,15 @@ missing knowledge, edit real software, and check the result against its runtime.
 
 ```sh
 bash scripts/install.sh --bin-dir "$HOME/.local/bin"
+rosetta status --project /path/to/project
 rosetta /path/to/project
 ```
+
+Status reports the selected project's references and declared check commands without
+running them. It works offline; benchmark diagnostics are available with
+`rosetta status --lab`. In the TUI, `/start` gives a short orientation in any
+repository. `rosetta doctor` checks live model access and the optional MUMPS/YottaDB
+verifier.
 
 Requires Python 3.11+ and an installed OpenCode terminal engine. Rosetta supplies the
 workflow and verifier; its default hosted model is selected from OpenCode's current free

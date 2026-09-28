@@ -65,12 +65,11 @@ corpus. `rosetta /another/project` opens another directory. The launcher
 injects Rosetta's config in memory, so it does not leave `.opencode` files in
 the project.
 
-The first screen says `Make changes…` and shows the selected provider/model ID.
-Rosetta handles discovery, planning, editing, and proof in one continuous session.
-Use `/start` for a short capability
-orientation, `/change REQUEST` for an intentional code-and-database change, or
-`/pipeline REQUEST` for a focused code workflow. Type `/` for the supporting
-services.
+The first screen names the selected provider/model and states that built-in runtime
+proof currently supports MUMPS/YottaDB only. `/start` is available in every repository
+for a short project orientation. In the Rosetta MUMPS checkout, `/change REQUEST` and
+`/pipeline REQUEST` provide domain workflows. Other projects use the same editor,
+reference tools, and their own checks without inheriting those MUMPS commands.
 
 For a panel, `/demo` is the compact proof of the thesis. It attempts a fresh,
 bounded YottaDB flight on real VA code, animates the actual proof stages in the
@@ -80,13 +79,17 @@ falls back immediately after the presentation budget to the committed AJETIU2
 audit trace. The fallback says **RECORDED AUDIT TRACE** on screen; it is never
 presented as a fresh run.
 
-`rosetta --help` and `rosetta status --plain` work offline with no
-container, network or credentials. Everything that needs those is loaded only
-by the command that needs it.
+`rosetta --help` and `rosetta status --plain` work offline with no container,
+network or credentials. `status --project PATH` reports the active repository's
+reference sources, missing-source requests and declared check commands without
+executing them. `status --lab` adds this checkout's benchmark and model-development
+diagnostics. The default free model is selected from OpenCode's current catalog
+when the editor launches; status does not mistake an empty optional model registry
+for unavailable model access.
 
-`rosetta doctor` is the one command to run when something is wrong. It answers
-four questions in order — python, verifier, model access, data — and stops
-guessing after the first `--`.
+`rosetta doctor` performs live model and MUMPS verifier checks. It answers four
+questions in order — python, verifier, model access, data — and stops guessing
+after the first `--`.
 
 ## 1. Change database state — `rosetta change` and `rosetta db`
 

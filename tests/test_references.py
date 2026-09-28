@@ -68,7 +68,8 @@ class ReferencesTests(unittest.TestCase):
         self.assertEqual(Catalog(nested).inventory()['sources'], [])
         config = cli._config(nested)
         self.assertEqual(set(config['mcp']), {'references'})
-        self.assertNotIn('MUMPS', json.dumps(config))
+        self.assertEqual(set(config['command']), {'start'})
+        self.assertNotIn('MUMPS', config['agent']['rosetta']['prompt'])
         self.assertNotIn('VistA', json.dumps(config))
 
     def test_missing_language_request_is_visible_and_cleared_after_import(self):

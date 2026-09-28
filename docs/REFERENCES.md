@@ -22,11 +22,17 @@ git clone https://github.com/travis-hodges/Rosetta.git
 cd Rosetta
 bash scripts/install.sh --bin-dir "$HOME/.local/bin"
 # From any repository:
+rosetta status --project /absolute/path/to/project
 rosetta /absolute/path/to/project
 # A headless run with real tool events:
 rosetta code /absolute/path/to/project --format json --timeout 600 \
   --prompt 'Implement the requested change and run the project checks.'
 ```
+
+`rosetta status` shows the selected repository's reference count, pending source
+requests, and declared check commands. It does not execute project commands or contact
+a model. `/start` is available in the TUI for a concise project orientation. Domain
+specific slash commands are not injected into unrelated repositories.
 
 The source checkout must remain at its installed location. If an existing launcher
 already occupies the destination, the installer refuses to overwrite it. Use the

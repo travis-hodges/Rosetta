@@ -36,11 +36,63 @@ def run(*argv: str) -> tuple[int, str]:
 
 
 class StatusTests(unittest.TestCase):
-    def test_bare_invocation_names_every_workflow(self) -> None:
+    def test_bare_status_describes_the_active_project(self) -> None:
         rc, text = run("--plain")
+        self.assertEqual(rc, 0)
+        self.assertIn("project", text)
+        self.assertIn(str(Path.cwd().resolve()), text)
+        self.assertIn("MUMPS/YottaDB only", text)
+        self.assertNotIn("split lock", text)
+
+    def test_lab_status_keeps_checkout_diagnostics_separate(self) -> None:
+        rc, text = run("status", "--plain", "--lab")
         self.assertEqual(rc, 0)
         for name, _blurb, _example in WORKFLOWS:
             self.assertIn(name, text)
+        self.assertIn("this checkout", text)
+
+    def test_status_shows_project_references_and_commands_without_running_them(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / ".git").mkdir()
+            (project / "manual.md").write_text("# Widget API\n", encoding="utf-8")
+            (project / "rosetta.json").write_text(json.dumps({
+                "version": 1,
+                "sources": [{
+                    "id": "widget", "title": "Widget API", "path": "manual.md",
+                    "language": "WidgetLang",
+                }],
+                "commands": {"test": ["python3", "check.py"]},
+            }), encoding="utf-8")
+            rc, text = run("status", "--plain", "--project", directory)
+        self.assertEqual(rc, 0)
+        self.assertIn("1 repository source(s) configured", text)
+        self.assertIn('"Widget API [WidgetLang]" ("widget")', text)
+        self.assertIn('project check "test": ["python3", "check.py"] (available, not run)', text)
+        self.assertIn("Other languages: use the project's own checks", text)
+        self.assertNotIn("eval task set", text)
+
+    def test_status_rejects_missing_project(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing = str(Path(directory) / "missing")
+            rc, text = run("status", "--plain", "--project", missing)
+        self.assertEqual(rc, 2)
+        self.assertIn("Project directory does not exist", text)
+
+    def test_status_points_to_the_pending_reference_request(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / ".git").mkdir()
+            state = project / ".rosetta"
+            state.mkdir()
+            (state / "reference-requests.json").write_text(json.dumps({
+                "version": 1,
+                "requests": [{"language": "JOVIAL", "reason": "syntax needed"}],
+            }), encoding="utf-8")
+            rc, text = run("status", "--plain", "--project", directory)
+        self.assertEqual(rc, 0)
+        self.assertIn('source needed for "JOVIAL"', text)
+        self.assertIn("rosetta references add PATH --language JOVIAL", text)
 
     def test_status_always_says_what_to_run_next(self) -> None:
         _rc, text = run("status", "--plain")

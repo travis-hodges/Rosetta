@@ -222,8 +222,9 @@ class SourceInstallationTests(unittest.TestCase):
         self.fake_harness("exit 0\n")
         result = self.run_cli("status", "--plain")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("workflows", result.stdout)
-        self.assertIn("this checkout", result.stdout)
+        self.assertIn("project", result.stdout)
+        self.assertIn("MUMPS/YottaDB only", result.stdout)
+        self.assertNotIn("eval task set", result.stdout)
 
     def test_missing_harness_blocks_the_tui(self):
         self.assertEqual(self.run_cli("code", "--prompt", "hello").returncode, 2)
@@ -401,7 +402,9 @@ class TuiConfigurationTests(unittest.TestCase):
 
     def test_external_project_receives_one_rosetta_primary_mode(self):
         config = cli._config()
-        self.assertEqual(config["command"], {})
+        self.assertEqual(set(config["command"]), {"start"})
+        self.assertEqual(config["command"]["start"]["agent"], "rosetta")
+        self.assertIn("repository-provided technical references", config["command"]["start"]["template"])
         self.assertEqual(set(config["mcp"]), {"references"})
         self.assertEqual(config["default_agent"], "rosetta")
         self.assertTrue(config["plugin"][0].endswith("/.opencode/plugins/rosetta-experience.js"))
@@ -425,7 +428,8 @@ class TuiConfigurationTests(unittest.TestCase):
             "provider": {"local": {}},
             "mcp": {"user-server": {"type": "remote", "url": "https://example.invalid"}},
             "agent": {"reviewer": {"mode": "subagent"}},
-            "command": {"ship": {"template": "Ship it"}},
+            "command": {"ship": {"template": "Ship it"},
+                        "start": {"template": "My project start"}},
             "instructions": ["/tmp/user-instructions.md"],
             "plugin": ["example-plugin"],
             "default_agent": "reviewer",
@@ -437,6 +441,7 @@ class TuiConfigurationTests(unittest.TestCase):
         self.assertIn("rosetta", merged["agent"])
         self.assertIn("ship", merged["command"])
         self.assertEqual(merged["command"]["ship"]["template"], "Ship it")
+        self.assertEqual(merged["command"]["start"]["template"], "My project start")
         self.assertIn("/tmp/user-instructions.md", merged["instructions"])
         self.assertIn(str(cli.ROOT / ".opencode" / "instructions.md"), merged["instructions"])
         self.assertEqual(merged["plugin"][0], "example-plugin")

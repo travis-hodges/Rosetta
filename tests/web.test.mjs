@@ -163,6 +163,8 @@ test('the installer and release manifest are publishable artifacts', async () =>
   // Strip comments first: the installer documents that it never uses sudo, and that
   // sentence must not be what trips the guard.
   const body = installer.replace(/^\s*#.*$/gm, '');
+  assert.match(body, /next="rosetta status"/);
+  assert.doesNotMatch(body, /next="rosetta doctor"/);
   assert.doesNotMatch(body, /\bsudo\b/, 'the installer must never invoke sudo');
   assert.doesNotMatch(body, /(^|\s)(rm\s+-rf?\s+["']?\$HOME["']?\s*$|rm\s+-rf?\s+\/\s)/m,
     'the installer must never remove a bare $HOME or /');
@@ -209,6 +211,13 @@ test('the first screen and language tabs distinguish editing from interpreter pr
   assert.match(script, /built-in interpreter proof and COBOL benchmark are not implemented/);
   assert.doesNotMatch(html, /Agent, Plan, and Verify modes/);
   assert.doesNotMatch(html, /applies Rosetta's reversible branding/);
+});
+
+test('download steps use project status before optional runtime diagnosis', () => {
+  assert.match(html, /03 \/ CHECK THIS PROJECT<\/span><code>rosetta status<\/code>/);
+  assert.match(PAGES[1].html, /03 \/ CHECK THIS PROJECT<\/span><code>rosetta status<\/code>/);
+  assert.match(PAGES[1].html, /rosetta doctor<\/code> checks live model access and the MUMPS runtime/);
+  assert.match(PAGES[1].html, /The editor also needs\s+the OpenCode terminal engine installed separately/);
 });
 
 test('the build produces a servable site and unknown paths 404', async t => {

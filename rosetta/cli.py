@@ -107,14 +107,16 @@ def _available_free_model(binary: str, env: dict[str, str]) -> str:
     return next((model for model in preferred if model in models), sorted(models)[0])
 
 
-def _command_profiles() -> dict[str, dict[str, object]]:
-    """Inline Rosetta slash commands when the TUI opens another project."""
+def _command_profiles(names: set[str] | None = None) -> dict[str, dict[str, object]]:
+    """Inline selected Rosetta slash commands when the TUI opens another project."""
     commands: dict[str, dict[str, object]] = {}
     launcher = (
         f"PYTHONPATH={shlex.quote(str(REPO_ROOT))} "
         f"{shlex.quote(sys.executable)} -m rosetta"
     )
     for path in sorted((REPO_ROOT / ".opencode" / "command").glob("*.md")):
+        if names is not None and path.stem not in names:
+            continue
         text = path.read_text(encoding="utf-8")
         if not text.startswith("---\n") or "\n---\n" not in text[4:]:
             raise ValueError(f"Invalid Rosetta command profile: {path}")
@@ -178,7 +180,9 @@ def _config(project: Path | None = None) -> dict[str, Any]:
             "\nRepository-provided commands (run with the normal shell tool): " + json.dumps(commands)
         )
     config["agent"]["rosetta"]["prompt"] += "\n" + STEERING
-    config["command"] = {}
+    # /start is generic onboarding. Domain commands stay with the MUMPS
+    # checkout so opening an unrelated repository never advertises them.
+    config["command"] = _command_profiles({"start"})
     return config
 
 
@@ -200,7 +204,8 @@ def _merge_user_config(config: dict[str, Any], raw: str) -> dict[str, Any]:
         user_entries = supplied.get(key, {})
         if user_entries is not None and not isinstance(user_entries, dict):
             raise ValueError(f"OPENCODE_CONFIG_CONTENT {key!r} must be an object.")
-        config[key] = {**(user_entries or {}), **rosetta_entries}
+        config[key] = ({**rosetta_entries, **(user_entries or {})} if key == "command"
+                       else {**(user_entries or {}), **rosetta_entries})
     user_providers = supplied.get("provider", {})
     if user_providers is not None and not isinstance(user_providers, dict):
         raise ValueError("OPENCODE_CONFIG_CONTENT 'provider' must be an object.")
@@ -424,19 +429,11 @@ def _published() -> dict[str, Any] | None:
 # status / doctor
 # --------------------------------------------------------------------------
 
-def cmd_status(args: argparse.Namespace) -> int:
-    """The map. Where you are, and the shortest way to the next thing."""
+def _lab_status() -> None:
+    """Optional checkout diagnostics for benchmark and model development."""
     from rosetta import models as model_registry
 
-    if not args.plain:
-        try:
-            from rosetta.ui.banner import print_banner
-
-            print_banner()
-        except Exception:  # a banner must never block the tool
-            pass
-
-    _head("workflows")
+    _head("lab workflows")
     for name, blurb, example in WORKFLOWS:
         print(f"  {name:<8} {blurb}")
         print(f"           {_paint(example, '2')}")
@@ -444,10 +441,10 @@ def cmd_status(args: argparse.Namespace) -> int:
     _head("this checkout")
     registered = model_registry.load()
     if registered:
-        print(_yes(f"{len(registered)} model(s) registered: "
+        print(_yes(f"{len(registered)} optional model(s) registered: "
                    + ", ".join(m.name for m in registered)))
     else:
-        print(_meh("no models registered — `rosetta model add NAME provider/id`"))
+        print(_meh("no optional models registered; the TUI selects a current free model at launch"))
 
     split = _split_summary()
     print(_yes(f"split lock: {split}") if split
@@ -466,18 +463,72 @@ def cmd_status(args: argparse.Namespace) -> int:
           if traces else _meh("no benchmark runs yet — `rosetta bench run`"))
 
     pub = _published()
-    if pub:
-        print(_yes("results/summary.json published — the website reads this"))
+    print(_yes("results/summary.json published — the website reads this") if pub
+          else _meh("nothing published — `rosetta bench report` writes summary.json"))
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Show the active project's editor, references and verification boundary."""
+    from rosetta.references import Catalog
+
+    project = getattr(args, "project", Path.cwd()).expanduser().resolve()
+    try:
+        inventory = Catalog(project).inventory()
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    if not args.plain:
+        try:
+            from rosetta.ui.banner import print_banner
+
+            print_banner()
+        except Exception:  # a banner must never block the tool
+            pass
+
+    _head("project")
+    print(f"  {project}")
+
+    _head("editor")
+    print(_yes("OpenCode terminal engine on PATH") if shutil.which("opencode")
+          else _no("OpenCode terminal engine missing — install it to open the editor"))
+    print("  With no model override, Rosetta selects a current OpenCode free model at launch.")
+    print("  `rosetta doctor` checks live model access and the MUMPS verifier.")
+
+    _head("references")
+    sources = inventory["sources"]
+    pending = inventory["pending_requests"]
+    if sources:
+        print(_yes(f"{len(sources)} repository source(s) configured"))
+        for source in sources:
+            language = f" [{source['language']}]" if source.get("language") else ""
+            print(f"  {json.dumps(source['title'] + language)} ({json.dumps(source['id'])})")
+    elif pending:
+        print(_no("no repository references configured"))
     else:
-        print(_meh("nothing published — `rosetta bench report` writes summary.json"))
+        print(_meh("no repository references configured; optional for familiar work"))
+    for request in pending:
+        print(_no(f"source needed for {json.dumps(request['language'])}"))
+    commands = inventory["commands"]
+    for name, argv in sorted(commands.items()):
+        print(f"  project check {json.dumps(name)}: {json.dumps(argv)} (available, not run)")
 
-    print(_yes("Rosetta harness on PATH") if shutil.which("opencode")
-          else _no("Rosetta harness not on PATH — needed to drive any model"))
+    _head("verification")
+    print("  Built-in interpreter and database-state proof: MUMPS/YottaDB only.")
+    print("  Other languages: use the project's own checks and report their scope.")
 
-    _next("rosetta               # open the editor TUI in this project",
-          "rosetta change -m '...' --set REF VALUE",
-          "rosetta doctor        # check the verifier can actually run",
-          "rosetta demo          # the side-by-side, offline, 60 seconds")
+    if getattr(args, "lab", False):
+        _lab_status()
+
+    target = "rosetta" if project == Path.cwd().resolve() else f"rosetta {shlex.quote(str(project))}"
+    next_steps = [f"{target}   # open this project in the editor"]
+    if pending:
+        next_steps.append(
+            "rosetta references add PATH --language "
+            f"{shlex.quote(pending[0]['language'])} --project {shlex.quote(str(project))}"
+        )
+    elif any(source.get("language", "").casefold() == "mumps" for source in sources):
+        next_steps.append("rosetta doctor   # check live model access and MUMPS runtime")
+    _next(*next_steps)
     return 0
 
 
@@ -1230,12 +1281,17 @@ def build_parser() -> argparse.ArgumentParser:
     # SUPPRESS keeps the subparser copy from clobbering a global one with its
     # own default.
     for name, help_text in (
-        ("status", "what is wired, and what to run next"),
-        ("doctor", "can this machine run the verifier"),
+        ("status", "show this project's editor, references and checks"),
+        ("doctor", "check live model access and the MUMPS verifier"),
     ):
         q = sub.add_parser(name, help=help_text)
         q.add_argument("--plain", action="store_true", default=argparse.SUPPRESS,
                        help="no banner")
+        if name == "status":
+            q.add_argument("--project", type=Path, default=Path.cwd(),
+                           help="target project (default: current directory)")
+            q.add_argument("--lab", action="store_true",
+                           help="also show benchmark and model-development checkout diagnostics")
 
     for name, help_text in (
         ("tui", "open the Rosetta TUI in a project"),

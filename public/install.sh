@@ -16,8 +16,8 @@
 #
 # What it does not do: use sudo, edit your shell profile, install a container, or
 # touch Docker. Rosetta runs its verifier inside a WorldVistA container that you
-# provision separately with scripts/bootstrap.sh; `rosetta demo` and `rosetta doctor`
-# work without it.
+# provision separately with scripts/bootstrap.sh. `rosetta status` and the recorded
+# `rosetta demo` work without it; `rosetta doctor` checks live readiness.
 #
 # Uninstall:  sh install.sh --uninstall
 
@@ -230,11 +230,11 @@ installed="$("$launcher" --version 2>/dev/null || echo "rosetta $VERSION")"
 say "$installed"
 
 case ":$PATH:" in
-  *":$BIN_DIR:"*) next="rosetta doctor" ;;
+  *":$BIN_DIR:"*) next="rosetta status" ;;
   *)
     printf '\n%s is not on your PATH. Add it:\n\n    export PATH="%s:$PATH"\n\n' "$BIN_DIR" "$BIN_DIR"
-    next="$launcher doctor" ;;
+    next="$launcher status" ;;
 esac
 
-printf 'next  %s   # can this machine run the verifier\n' "$next"
-printf '      %s     # the thesis, offline, no container needed\n' "$(printf '%s' "$next" | sed 's/doctor/demo  /')"
+printf 'next  %s   # see this project and its checks\n' "$next"
+printf '      %s     # the thesis, offline, no container needed\n' "$(printf '%s' "$next" | sed 's/status/demo  /')"

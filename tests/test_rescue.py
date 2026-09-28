@@ -57,8 +57,8 @@ class TerminalTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("workflows", result.stdout)
-        self.assertIn("this checkout", result.stdout)
+        self.assertIn("project", result.stdout)
+        self.assertIn("MUMPS/YottaDB only", result.stdout)
 
     def test_launch_forwards_custom_model_and_corpus(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -89,7 +89,7 @@ class TerminalTests(unittest.TestCase):
                 config["mcp"]["references"]["environment"]["ROSETTA_CORPUS_DIR"],
                 str(Path(directory).resolve()),
             )
-            self.assertEqual(config["command"], {})
+            self.assertEqual(set(config["command"]), {"start"})
 
     def test_benchmark_environment_disables_inherited_tools(self):
         agent = RosettaAgent(isolated=True, tools_on=True)
