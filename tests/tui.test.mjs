@@ -77,6 +77,8 @@ test('the shipped and generic TUI presets both declare the live project map', as
   assert.match(source, /CHANGE/);
   assert.match(source, /PROVE/);
   assert.match(source, /ROSETTA SESSION:/);
+  assert.match(source, /Edit any repo · Built-in runtime proof: MUMPS\/YottaDB only/);
+  assert.match(source, /Edit any repo · MUMPS proof only/);
   assert.match(source, /ROSETTA_VERSION/);
   assert.match(source, /onMouseDown/);
   assert.match(source, /onKeyDown/);
@@ -98,6 +100,14 @@ test('the shipped and generic TUI presets both declare the live project map', as
   // success -- silently drew the two swatches that carry the panel's meaning
   // in no colour at all.
   assert.doesNotMatch(source, /skin\(\)\.(error|success)/);
+});
+
+test('onboarding explains the language boundary before suggesting MUMPS commands', async () => {
+  const start = await readFile(new URL('../.opencode/command/start.md', import.meta.url), 'utf8');
+  const instructions = await readFile(new URL('../.opencode/instructions.md', import.meta.url), 'utf8');
+  assert.match(start, /built-in interpreter and\s+database-state proof currently work only for MUMPS under YottaDB/);
+  assert.match(start, /other\s+languages, run this repository's own checks/);
+  assert.match(instructions, /other languages, use the repository's own checks/);
 });
 
 // This is the test that was missing when the experience plugin went dark:

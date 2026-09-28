@@ -90,9 +90,9 @@ patchButtons.forEach(button => button.addEventListener('click', () => {
 }));
 const languages = {
   mumps: { engine: 'MUMPS / YOTTADB', title: 'Start where the code\nmeets the record.', description: 'MUMPS is Rosetta’s first executable language. Inspect routines, evaluate changes, and compare captured global state using YottaDB.', boundary: 'Bring your chosen model. Specialist Rosetta weights remain on the roadmap.' },
-  cobol: { engine: 'COBOL', title: 'A longer horizon\nfor business logic.', description: 'COBOL is part of the legacy-code challenge. GAO’s 2025 review identified Treasury systems using COBOL and assembly, with a shrinking pool of maintainers.', boundary: 'COBOL runtime support, benchmarks, and specialist weights remain on the roadmap.' },
-  jovial: { engine: 'JOVIAL', title: 'Make the unfamiliar\napproachable.', description: 'JOVIAL is part of Rosetta’s long-term language vision. Meaningful support will require a runtime, representative code, and executable evaluation cases.', boundary: 'JOVIAL runtime integration, measured results, and specialist weights remain on the roadmap.' },
-  cms: { engine: 'CMS-2', title: 'More languages.\nThe same standard.', description: 'CMS-2 is another language in the long-term vision. Each new language must earn its place through runtime integration and inspectable evaluation evidence.', boundary: 'CMS-2 runtime integration, measured results, and specialist weights remain on the roadmap.' },
+  cobol: { engine: 'COBOL', title: 'A longer horizon\nfor business logic.', description: 'Rosetta can edit COBOL repositories and consult supplied references. Use the project’s own compiler and tests to check changes.', boundary: 'Rosetta’s built-in interpreter proof and COBOL benchmark are not implemented.' },
+  jovial: { engine: 'JOVIAL', title: 'Make the unfamiliar\napproachable.', description: 'Rosetta can edit a JOVIAL repository and consult supplied references. Use the project’s own toolchain to check changes.', boundary: 'Rosetta’s built-in interpreter proof and JOVIAL benchmark are not implemented.' },
+  cms: { engine: 'CMS-2', title: 'More languages.\nThe same standard.', description: 'Rosetta can edit a CMS-2 repository and consult supplied references. Use the project’s own toolchain to check changes.', boundary: 'Rosetta’s built-in interpreter proof and CMS-2 benchmark are not implemented.' },
 };
 const languageTabs = [...document.querySelectorAll('[data-language]')];
 function selectLanguage(button, focus = false) {
@@ -104,7 +104,7 @@ function selectLanguage(button, focus = false) {
   });
   document.querySelector('#language-panel').setAttribute('aria-labelledby', button.id);
   const status = document.querySelector('#language-status');
-  status.textContent = name === 'mumps' ? 'RUNTIME IMPLEMENTED' : 'FUTURE DIRECTION';
+  status.textContent = name === 'mumps' ? 'RUNTIME IMPLEMENTED' : 'EDITOR + REFERENCES';
   status.classList.toggle('future', name !== 'mumps');
   document.querySelector('#language-engine').textContent = language.engine;
   document.querySelector('#language-title').textContent = language.title;

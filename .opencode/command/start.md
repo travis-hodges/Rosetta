@@ -4,11 +4,14 @@ agent: rosetta
 ---
 Orient the developer to this workspace in no more than eight lines.
 
-State that Rosetta is an editor for changing VA VistA MUMPS systems, including
-their persistent database state, with executable evaluation built in. Identify
-whether MUMPS routines, YottaDB, and reusable case suites are available here.
-Name one safe next command—usually `/change REQUEST`, `/database REQUEST`, or
-`/demo`.
+State the support boundary clearly: Rosetta can edit code in any repository and
+consult repository-provided technical references. Its built-in interpreter and
+database-state proof currently work only for MUMPS under YottaDB. For other
+languages, run this repository's own checks and report their actual scope.
+Identify the files, available references, and checks in this workspace. If it is
+a MUMPS project, identify whether YottaDB and reusable case suites are available.
+Suggest one useful next action based on the project. Reserve `/change`,
+`/database`, `/verify`, and `/demo` for their MUMPS workflows.
 
 Do not describe the benchmark, verifier, or model as a separate product. Do not
 claim a runtime is ready unless a live check established it.

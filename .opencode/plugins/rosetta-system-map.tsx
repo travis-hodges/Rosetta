@@ -104,6 +104,13 @@ function RosettaLogo(props: { api: TuiPluginApi }) {
         <span style={{ fg: skin().muted }}>  ◆  </span>
         <span style={{ fg: ROSETTA_GRADIENT[6] }}><b>PROVE</b></span>
       </text>
+      <Show when={wide()} fallback={
+        <text fg={skin().muted} wrapMode="none">Edit any repo · MUMPS proof only</text>
+      }>
+        <text fg={skin().muted} wrapMode="none">
+          Edit any repo · Built-in runtime proof: MUMPS/YottaDB only
+        </text>
+      </Show>
     </box>
   )
 }

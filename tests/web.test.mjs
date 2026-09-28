@@ -201,6 +201,16 @@ test('the landing page shows the product surface and official installer', () => 
   assert.doesNotMatch(script, /FUTURE RUNTIME/);
 });
 
+test('the first screen and language tabs distinguish editing from interpreter proof', () => {
+  assert.match(html, /Built-in interpreter proof of output and database state currently works only for MUMPS under YottaDB/);
+  assert.match(html, /RUNTIME PROOF TODAY<br>MUMPS \/ YOTTADB ONLY/);
+  assert.match(html, /Editing and technical references work across repositories/);
+  assert.match(script, /EDITOR \+ REFERENCES/);
+  assert.match(script, /built-in interpreter proof and COBOL benchmark are not implemented/);
+  assert.doesNotMatch(html, /Agent, Plan, and Verify modes/);
+  assert.doesNotMatch(html, /applies Rosetta's reversible branding/);
+});
+
 test('the build produces a servable site and unknown paths 404', async t => {
   const build = spawn(process.execPath, ['scripts/build.mjs'], { cwd: site, stdio: 'pipe' });
   const [code] = await once(build, 'exit');

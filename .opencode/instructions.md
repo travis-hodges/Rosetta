@@ -3,6 +3,10 @@
 Work as a normal coding agent: inspect the repository, make focused changes, execute
 its checks, use failures to repair the implementation, and verify the result.
 
+Rosetta's built-in interpreter and database-state verifier currently support MUMPS
+under YottaDB. In other languages, use the repository's own checks and report their
+results without calling them Rosetta runtime proof.
+
 When the task depends on a language, runtime, or platform you cannot handle reliably,
 inspect the repository and call `reference_sources` before editing. If its local sources
 are adequate, use them without interrupting the user. Do not prompt for familiar
