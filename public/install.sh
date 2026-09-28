@@ -12,7 +12,7 @@
 # What it does: checks for Python 3.11+, downloads a release tarball from GitHub,
 # verifies it against that release's SHA256SUMS, unpacks it under
 # ~/.local/share/rosetta/<version>/, creates a launcher at ~/.local/bin/rosetta,
-# and applies Rosetta's reversible presentation patch to the terminal engine.
+# and supplies Rosetta's TUI presentation without modifying the terminal engine.
 #
 # What it does not do: use sudo, edit your shell profile, install a container, or
 # touch Docker. Rosetta runs its verifier inside a WorldVistA container that you
@@ -73,15 +73,17 @@ done
 if [ "$UNINSTALL" = 1 ]; then
   removed=0
   launcher="$BIN_DIR/rosetta"
-  # Restore the terminal engine before deleting the installed brander. This is
-  # best effort because the engine may already have been upgraded or removed.
+  # Older releases modified the shared engine. Restore only when its recorded
+  # checksum still matches that exact Rosetta patch; never replace a newer engine.
   engine="$(command -v opencode 2>/dev/null || true)"
   brander=""
   if [ -d "$HOME_DIR" ]; then
     brander="$(find "$HOME_DIR" -path '*/scripts/rosetta-brand.py' -type f 2>/dev/null | sort | tail -n1)"
   fi
   if [ -n "$engine" ] && [ -n "$brander" ] && command -v "${ROSETTA_PYTHON:-python3}" >/dev/null 2>&1; then
-    if "${ROSETTA_PYTHON:-python3}" "$brander" --binary "$engine" --revert >/dev/null 2>&1; then
+    if "${ROSETTA_PYTHON:-python3}" "$brander" --binary "$engine" --check >/dev/null 2>&1; then
+      "${ROSETTA_PYTHON:-python3}" "$brander" --binary "$engine" --revert >/dev/null \
+        || die "could not restore the older Rosetta engine patch"
       say "restored the terminal engine"
     fi
   fi

@@ -11,17 +11,6 @@
       "enabled": true
     }
   },
-  "model": "opencode/big-pickle",
-  "provider": {
-    "opencode": {
-      "name": "Rosetta",
-      "models": {
-        "big-pickle": {
-          "name": "Rosetta Zen"
-        }
-      }
-    }
-  },
   "default_agent": "rosetta",
   "instructions": [
     ".opencode/instructions.md"

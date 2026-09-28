@@ -179,7 +179,11 @@ class SourceInstallationTests(unittest.TestCase):
         shutil.copytree(cli.REPO_ROOT / ".opencode" / "themes", self.checkout / ".opencode" / "themes")
         shutil.copy(cli.REPO_ROOT / ".opencode" / "instructions.md", self.checkout / ".opencode")
         shutil.copy(cli.REPO_ROOT / ".opencode" / "tui.json", self.checkout / ".opencode")
-        shutil.copytree(cli.REPO_ROOT / ".opencode" / "generic", self.checkout / ".opencode" / "generic")
+        shutil.copytree(
+            cli.REPO_ROOT / ".opencode" / "generic",
+            self.checkout / ".opencode" / "generic",
+            ignore=shutil.ignore_patterns("node_modules"),
+        )
         shutil.copy(cli.REPO_ROOT / "opencode.json", self.checkout)
         (self.checkout / "data").symlink_to(cli.REPO_ROOT / "data", target_is_directory=True)
         (self.checkout / "scripts").mkdir()
@@ -206,7 +210,11 @@ class SourceInstallationTests(unittest.TestCase):
 
     def fake_harness(self, body):
         executable = self.bin_dir / "opencode"
-        executable.write_text("#!/bin/sh\n" + body)
+        executable.write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = models ] && [ "$2" = opencode ]; then printf "%s\\n" '
+            'opencode/mimo-v2.6-flash-free opencode/paid; exit 0; fi\n' + body
+        )
         executable.chmod(0o755)
 
     def test_help_and_status_from_unrelated_directory(self):
@@ -266,11 +274,26 @@ class SourceInstallationTests(unittest.TestCase):
             str((self.checkout / ".opencode" / "generic").resolve()),
         )
 
-    def test_tui_disables_the_embedded_engine_updater(self):
-        self.fake_harness('printf "%s\\n" "$OPENCODE_DISABLE_AUTOUPDATE"\nexit 0\n')
+    def test_tui_keeps_the_embedded_engine_updater_enabled(self):
+        self.env.pop("OPENCODE_DISABLE_AUTOUPDATE", None)
+        self.fake_harness('printf "%s\\n" "${OPENCODE_DISABLE_AUTOUPDATE-unset}"\nexit 0\n')
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "1")
+        self.assertEqual(result.stdout.strip(), "unset")
+
+    def test_default_model_is_selected_from_the_engine_catalog(self):
+        self.fake_harness('printf "%s\\n" "$@"\nexit 0\n')
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("opencode/mimo-v2.6-flash-free", result.stdout.splitlines())
+
+    def test_missing_free_model_fails_before_starting_a_paid_model(self):
+        executable = self.bin_dir / "opencode"
+        executable.write_text('#!/bin/sh\nprintf "%s\\n" opencode/paid\n')
+        executable.chmod(0o755)
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("no free coding model", result.stderr)
 
     def test_an_explicit_tui_preset_override_is_preserved(self):
         override = self.directory / "operator-tui.json"
@@ -382,17 +405,13 @@ class TuiConfigurationTests(unittest.TestCase):
         self.assertEqual(set(config["mcp"]), {"references"})
         self.assertEqual(config["default_agent"], "rosetta")
         self.assertTrue(config["plugin"][0].endswith("/.opencode/plugins/rosetta-experience.js"))
-        self.assertEqual(config["model"], "opencode/big-pickle")
+        self.assertNotIn("model", config)
         self.assertNotIn("MUMPS", config["agent"]["rosetta"]["prompt"])
         self.assertTrue(config["agent"]["build"]["disable"])
         self.assertTrue(config["agent"]["plan"]["disable"])
         primary = [name for name, entry in config["agent"].items() if entry.get("mode") == "primary"]
         self.assertEqual(primary, ["rosetta"])
-        self.assertEqual(config["provider"]["opencode"]["name"], "Rosetta")
-        self.assertEqual(
-            config["provider"]["opencode"]["models"]["big-pickle"]["name"],
-            "Rosetta Zen",
-        )
+        self.assertNotIn("provider", config)
 
     def test_every_slash_command_stays_in_the_rosetta_session(self):
         command_dir = cli.REPO_ROOT / ".opencode" / "command"
@@ -424,27 +443,20 @@ class TuiConfigurationTests(unittest.TestCase):
         self.assertTrue(merged["plugin"][-1].endswith("rosetta-experience.js"))
         self.assertEqual(merged["default_agent"], "rosetta")
 
-    def test_model_label_merge_preserves_user_provider_settings(self):
+    def test_user_provider_and_model_are_preserved(self):
         merged = cli._merge_user_config(cli._config(), json.dumps({
+            "model": "local/specialist",
             "provider": {
                 "opencode": {
                     "options": {"timeout": 90000},
-                    "models": {
-                        "big-pickle": {"name": "My model", "options": {"temperature": 0.2}},
-                        "another": {"name": "Another"},
-                    },
+                    "models": {"another": {"name": "Another"}},
                 }
             }
         }))
         provider = merged["provider"]["opencode"]
+        self.assertEqual(merged["model"], "local/specialist")
         self.assertEqual(provider["options"]["timeout"], 90000)
         self.assertIn("another", provider["models"])
-        self.assertEqual(provider["name"], "Rosetta")
-        self.assertEqual(provider["models"]["big-pickle"]["name"], "Rosetta Zen")
-        self.assertEqual(
-            provider["models"]["big-pickle"]["options"]["temperature"],
-            0.2,
-        )
 
 
 class ReleaseArtifactTests(unittest.TestCase):

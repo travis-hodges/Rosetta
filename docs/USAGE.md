@@ -13,9 +13,12 @@ project. `rosetta /another/project` opens a different directory.
 Rosetta uses one primary mode for discovery, planning, editing, execution, and proof.
 Those are stages of the same session rather than separate personalities selected with Tab.
 
-The internal default model ID remains unchanged for provider compatibility, but Rosetta presents it as
-**Rosetta Zen** throughout the product UI. This is a display identity, not evidence
-of MUMPS specialization; benchmark it before making a capability claim.
+At launch, Rosetta asks the installed OpenCode engine for its current model catalog and
+selects a listed free model. The actual provider/model ID is shown. An explicit
+`--model provider/model` or `OPENCODE_CONFIG_CONTENT` model overrides this default.
+If no free model is listed, Rosetta stops before sending a prompt to a paid model.
+The engine's normal updater is enabled unless you disabled it in your own environment.
+Model availability and access can change; use `rosetta models` to inspect the catalog.
 
 Inside the TUI, use `/start` for orientation, `/change REQUEST` for an
 outcome-first code change, or `/database REQUEST` for a persistent database

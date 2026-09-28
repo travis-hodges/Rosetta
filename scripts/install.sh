@@ -50,12 +50,14 @@ print(f"Check setup with {shlex.quote(str(destination))} doctor")
 print(f"To use 'rosetta' by name, add {destination.parent} to your PATH.")
 PY
 
-# A clean Rosetta install must never expose the engine's upstream presentation.
-# Apply the reversible, byte-length-preserving branding patch when the engine is
-# available. The launcher will still install without it so `rosetta doctor` can
-# explain the missing prerequisite on a new machine.
+# Older Rosetta releases patched the shared engine executable and replaced its
+# version string. Restore that exact, recognized patch so the upstream updater
+# can work again. Current Rosetta branding is provided by the TUI plugin.
 ROSETTA_ENGINE="$(command -v opencode || true)"
 if [[ -n "$ROSETTA_ENGINE" ]]; then
-  "${ROSETTA_PYTHON:-python3}" "$ROSETTA_SOURCE_ROOT/scripts/rosetta-brand.py" \
-    --binary "$ROSETTA_ENGINE" --no-command
+  if "${ROSETTA_PYTHON:-python3}" "$ROSETTA_SOURCE_ROOT/scripts/rosetta-brand.py" \
+      --binary "$ROSETTA_ENGINE" --check >/dev/null 2>&1; then
+    "${ROSETTA_PYTHON:-python3}" "$ROSETTA_SOURCE_ROOT/scripts/rosetta-brand.py" \
+      --binary "$ROSETTA_ENGINE" --revert
+  fi
 fi

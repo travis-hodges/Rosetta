@@ -37,8 +37,8 @@ Usage:
   scripts/rosetta-brand.py --bin-dir DIR    # where to put the `rosetta` command
   scripts/rosetta-brand.py --no-command     # patch only, no `rosetta` command
 
-Re-run it after `brew upgrade opencode` / `npm i -g opencode-ai@latest`; an
-upgrade replaces the binary and drops every patch.
+This is retained for restoring patches from older Rosetta installations.
+New Rosetta installs use native TUI branding and leave the engine unmodified.
 """
 
 from __future__ import annotations
@@ -635,6 +635,7 @@ def main() -> int:
     ap.add_argument("--no-command", action="store_true", help="patch only")
     ap.add_argument("--check", action="store_true", help="report state, change nothing")
     ap.add_argument("--revert", action="store_true", help="restore the original binary")
+    ap.add_argument("--legacy-patch", action="store_true", help="explicitly apply the obsolete binary patch")
     ap.add_argument("--print-logo", action="store_true", help="preview the wordmark")
     args = ap.parse_args()
 
@@ -647,6 +648,9 @@ def main() -> int:
         return cmd_check(binary)
     if args.revert:
         return cmd_revert(binary)
+    if not args.legacy_patch:
+        print("No binary patch applied. Rosetta now uses native TUI branding.")
+        return 0
     bin_dir = Path(args.bin_dir) if args.bin_dir else None
     return cmd_apply(binary, bin_dir, not args.no_command)
 

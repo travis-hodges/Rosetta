@@ -17,8 +17,10 @@ bash scripts/install.sh --bin-dir "$HOME/.local/bin"
 rosetta /path/to/project
 ```
 
-Requires Python 3.11+ and an installed/configured terminal engine. Local retrieval is
-offline; hosted model access needs a connection. The MUMPS demo additionally needs
+Requires Python 3.11+ and an installed OpenCode terminal engine. Rosetta supplies the
+workflow and verifier; its default hosted model is selected from OpenCode's current free
+catalog and retains the provider's actual name. Local retrieval is offline; hosted model
+access needs a connection. The MUMPS demo additionally needs
 the existing Docker/YottaDB runtime. [Runtime setup](docs/REFERENCES.md#real-mumps-demo).
 
 ## Run the MUMPS demo

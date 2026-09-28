@@ -44,6 +44,9 @@ agency is implied.
 Runtime dependencies obtained separately — not bundled
 --------------------------------------------------------------------------------
 
+Rosetta's TUI uses the separately installed OpenCode engine and its model providers.
+OpenCode and those models are not Rosetta software and are not included in this release.
+
 Rosetta executes MUMPS through YottaDB inside a container image published by
 WorldVistA (worldvista/vehu). Neither YottaDB nor that image is redistributed
 here; scripts/bootstrap.sh pulls the image from its publisher at install time,

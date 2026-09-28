@@ -74,6 +74,8 @@ class TerminalTests(unittest.TestCase):
     def test_bare_launch_uses_project_as_workspace_and_default_corpus(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(cli, "_harness", return_value="opencode"), patch.object(
+                cli, "_available_free_model", return_value="opencode/test-free"
+            ), patch.object(
                 cli.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)
             ) as run, patch.object(Path, "cwd", return_value=Path(directory)):
                 self.assertEqual(cli.main([]), 0)

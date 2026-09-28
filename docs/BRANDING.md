@@ -1,28 +1,26 @@
 # Rosetta presentation contract
 
-Rosetta is the product name on every rendered surface. The terminal wordmark, window
-title, help text, permission dialogs, crash screen, tips, session title, footer, provider,
-model, and command examples must all say **Rosetta**.
+Rosetta owns its TUI home screen, theme, workflow commands, and primary agent.
+The underlying OpenCode engine and hosted model retain their actual names and versions.
 
 On startup, Rosetta owns the full home logo slot with a six-row block wordmark. Its
 letters form one continuous red-to-purple gradient, followed by the product loop:
 **UNDERSTAND ◆ CHANGE ◆ PROVE**. Narrow terminals receive a compact colored wordmark
 instead of clipping the banner.
 
-The default model is presented as **Rosetta Zen**. Rosetta has one selectable primary
-mode named **Rosetta**. Discovery, planning, editing, execution, and proof are stages in
-that session. The engine's stock `build` and `plan` modes are disabled, and Rosetta does
-not ship parallel Plan or Verify personalities.
+At launch, Rosetta selects a free model advertised by the installed engine. The actual
+provider and model ID remain visible. Rosetta has one selectable primary mode named
+**Rosetta**. Discovery, planning, editing, execution, and proof are stages in that
+session. The engine's stock `build` and `plan` modes are disabled.
 
 ## Install behavior
 
-The documented installer and the source installer both run the branding step when the
-terminal engine is present. The patch is reversible, byte-length preserving, smoke-tested,
-and re-signed on macOS. A pristine backup is written beside the executable before the
-first change. Uninstall restores that backup before removing Rosetta's files.
+The installer leaves the shared engine executable intact. If it finds a verified patch
+from an older Rosetta release, it restores the original executable. OpenCode can then
+report its own version and use its normal update behavior. The Rosetta launcher injects
+its TUI theme, logo, reference tools, primary agent, and commands without a binary patch.
 
 ```bash
-scripts/rosetta-brand.py
 scripts/rosetta-brand.py --check
 scripts/rosetta-brand.py --print-logo
 scripts/rosetta-brand.py --revert
@@ -42,21 +40,21 @@ Several upstream protocol identifiers are load-bearing and remain internal:
 - the `opencode` provider key and `opencode.ai` schema addresses
 - package-manager identifiers and credential storage paths
 
-They are implementation addresses rather than display names. Renaming them prevents the
-engine from finding its configuration, provider, or credentials. Rosetta's tests permit
-these tokens only in internal wiring and reject them from product-facing copy.
+Renaming these identifiers prevents the engine from finding its configuration, provider,
+or credentials. Rosetta identifies OpenCode as its engine in technical documentation and
+shows the actual model name in the TUI.
 
 ## Verification
 
-Run the presentation audit, branding tests, and a real terminal smoke test:
+Run the presentation audit and a real terminal smoke test:
 
 ```bash
-python3 scripts/rosetta-brand.py --check
 python3 -m unittest tests.test_install
 npm test
 rosetta --version
+opencode --version
+opencode models opencode
 ```
 
-An engine upgrade replaces the patched executable. Re-run the Rosetta installer or
-`scripts/rosetta-brand.py`; required patches fail before writing if the new bundle no
-longer matches the safe replacement table.
+The legacy branding script remains for restoring installations made before this change.
+New installations do not patch OpenCode.

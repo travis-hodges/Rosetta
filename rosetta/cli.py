@@ -80,6 +80,33 @@ def _harness() -> str:
     return binary
 
 
+def _available_free_model(binary: str, env: dict[str, str]) -> str:
+    """Select an advertised free model without pinning a changing provider catalog."""
+    try:
+        result = subprocess.run(
+            [binary, "models", "opencode"], env=env, capture_output=True,
+            text=True, timeout=20,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ValueError(f"Could not check available free models: {exc}") from exc
+    if result.returncode:
+        raise ValueError(
+            "Could not list available free models. Run `opencode models opencode` "
+            "or select an installed model with `rosetta --model provider/model`."
+        )
+    models = {
+        line.strip() for line in (result.stdout or "").splitlines()
+        if line.strip().startswith("opencode/") and line.strip().endswith("-free")
+    }
+    if not models:
+        raise ValueError(
+            "The terminal engine advertises no free coding model. Run "
+            "`opencode upgrade` or select a model with `rosetta --model provider/model`."
+        )
+    preferred = ("opencode/mimo-v2.6-flash-free", "opencode/nemotron-3.5-lightning-free")
+    return next((model for model in preferred if model in models), sorted(models)[0])
+
+
 def _command_profiles() -> dict[str, dict[str, object]]:
     """Inline Rosetta slash commands when the TUI opens another project."""
     commands: dict[str, dict[str, object]] = {}
@@ -229,10 +256,6 @@ def cmd_tui(args: argparse.Namespace) -> int:
         env["ROSETTA_HOME"] = str(REPO_ROOT)
         env["ROSETTA_VERSION"] = __version__
         env["ROSETTA_PYTHON"] = sys.executable
-        # Rosetta owns its release lifecycle. The embedded engine's updater
-        # compares unrelated engine and Rosetta version numbers and would
-        # otherwise offer to replace the branded runtime from inside the TUI.
-        env["OPENCODE_DISABLE_AUTOUPDATE"] = "1"
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(REPO_ROOT), env.get("PYTHONPATH", "")]))
         # The Rosetta theme lives beside its shipped agents and commands. The
         # TUI can open any target project, so make that source directory
@@ -262,7 +285,8 @@ def cmd_tui(args: argparse.Namespace) -> int:
         mcp_env["ROSETTA_PROJECT_DIR"] = str(project)
         env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
 
-        command = [_harness()]
+        binary = _harness()
+        command = [binary]
         if args.prompt is None:
             command.append(str(project))
         else:
@@ -274,6 +298,8 @@ def cmd_tui(args: argparse.Namespace) -> int:
             from rosetta import models as model_registry
 
             command.extend(["--model", model_registry.resolve(args.model) or args.model])
+        elif not config.get("model"):
+            command.extend(["--model", _available_free_model(binary, env)])
         if args.prompt is not None:
             command.extend(["--", args.prompt])
         try:
@@ -480,8 +506,18 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
         usable, reason = rosetta_agent_available()
         print(_yes(reason) if usable else _no(reason))
+        if usable:
+            try:
+                free_model = _available_free_model(_harness(), os.environ.copy())
+                print(_yes(f"default free model available: {free_model}"))
+            except ValueError as exc:
+                print(_no(str(exc)))
+                ok = False
+        else:
+            ok = False
     except Exception as exc:
         print(_no(f"could not query the Rosetta harness: {exc}"))
+        ok = False
 
     _head("data")
     split = _split_summary()

@@ -188,8 +188,8 @@ test('the stakes and product answer are explicit', () => {
 test('the landing page shows the product surface and official installer', () => {
   assert.match(html, /Rosetta terminal UI/);
   assert.match(html, /ROSETTA TUI/);
-  assert.doesNotMatch(html, /OpenCode/i);
-  assert.match(html, /Rosetta Zen/);
+  assert.match(html, /OpenCode Big Pickle \(recorded\)/);
+  assert.doesNotMatch(html, /Rosetta Zen/);
   assert.doesNotMatch(html, /Rosetta-(?:Agent|Plan|Verify)|Translator 1\.0|tab<\/b> agents/i);
   assert.match(html, /RECORDED AUDIT TRACE/);
   assert.doesNotMatch(html, /ACTUAL PRODUCT UI|product-window|product-stage/);

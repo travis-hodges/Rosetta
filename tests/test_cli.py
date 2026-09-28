@@ -116,6 +116,7 @@ class TuiLaunchTests(unittest.TestCase):
             completed = SimpleNamespace(returncode=0)
             with mock.patch.dict(os.environ, {"OPENCODE_CONFIG_CONTENT": ""}), \
                     mock.patch("rosetta.cli._harness", return_value="opencode"), \
+                    mock.patch("rosetta.cli._available_free_model", return_value="opencode/test-free"), \
                     mock.patch("rosetta.cli.subprocess.run", return_value=completed) as launched:
                 self.assertEqual(cmd_tui(args), 0)
 
